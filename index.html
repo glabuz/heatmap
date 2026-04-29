@@ -375,9 +375,9 @@
 
   <div class="legend">
     <span>Yes price ›</span>
-    <span class="swatch"><span class="chip" style="background:#b85431"></span>0% (No)</span>
+    <span class="swatch"><span class="chip" style="background:#c4452a"></span>0% (No)</span>
     <span class="swatch"><span class="chip" style="background:#d9a521"></span>50% (toss-up)</span>
-    <span class="swatch"><span class="chip" style="background:#2f5d3a"></span>100% (Yes)</span>
+    <span class="swatch"><span class="chip" style="background:#3d8a45"></span>100% (Yes)</span>
     <span style="margin-left:auto"><sup style="color:var(--tomato)">*</sup> Excludes settled markets (Yes price ≥97% or ≤3%) · click a cell to open the market ↗</span>
   </div>
 
@@ -588,14 +588,18 @@
   }
 
   // ---- color: yes-price gradient ----
+  // Square-root curve so the gradient accelerates away from the mustard
+  // midpoint — a 60% Yes market reads as clearly green, not yellow-green.
   function priceColor(p) {
     if (p == null) return "#8b7355";
     if (p < 0.5) {
-      const t = p / 0.5;
-      return d3.interpolateRgb("#b85431", "#d9a521")(t);
+      const t = (0.5 - p) / 0.5;            // 1 at p=0, 0 at p=0.5
+      const tt = Math.sqrt(t);              // accelerate toward red
+      return d3.interpolateRgb("#d9a521", "#c4452a")(tt);
     } else {
-      const t = (p - 0.5) / 0.5;
-      return d3.interpolateRgb("#d9a521", "#2f5d3a")(t);
+      const t = (p - 0.5) / 0.5;            // 0 at p=0.5, 1 at p=1
+      const tt = Math.sqrt(t);              // accelerate toward green
+      return d3.interpolateRgb("#d9a521", "#3d8a45")(tt);
     }
   }
   function colorFor(d) {
