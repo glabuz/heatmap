@@ -38,8 +38,6 @@
     position: relative;
     overflow-x: hidden;
   }
-
-  /* film-grain overlay */
   body::before {
     content: "";
     position: fixed; inset: 0; pointer-events: none; z-index: 100;
@@ -77,12 +75,8 @@
     margin: 0;
     color: var(--ink);
   }
-  .brand em {
-    font-style: italic; font-weight: 700; color: var(--tomato);
-  }
-  .brand .amp {
-    font-style: italic; color: var(--rust); font-weight: 400;
-  }
+  .brand em { font-style: italic; font-weight: 700; color: var(--tomato); }
+  .brand .amp { font-style: italic; color: var(--rust); font-weight: 400; }
   .kicker {
     font-family: "JetBrains Mono", monospace;
     font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
@@ -270,6 +264,15 @@
     max-width: 380px;
     font-family: "Space Grotesk", sans-serif; font-size: 12px;
   }
+  .tooltip .q { font-family: "Fraunces", serif; font-weight: 700; font-size: 14px; margin-bottom: 6px; line-height: 1.25; }
+  .tooltip .row { display: flex; justify-content: space-between; gap: 12px; font-family: "JetBrains Mono", monospace; }
+  .tooltip .row .k { color: var(--muted); }
+  .tooltip .badge {
+    display: inline-block; padding: 2px 7px;
+    border: 1px solid var(--ink); background: var(--mustard);
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    margin-top: 6px; transform: rotate(-2deg);
+  }
   .tooltip .toplist {
     margin-top: 8px; padding-top: 6px;
     border-top: 1px dashed var(--ink);
@@ -291,15 +294,6 @@
   .tooltip .toplist .item .v {
     color: var(--muted); font-family: "JetBrains Mono", monospace;
     flex-shrink: 0; font-size: 10.5px;
-  }
-  .tooltip .q { font-family: "Fraunces", serif; font-weight: 700; font-size: 14px; margin-bottom: 6px; line-height: 1.25; }
-  .tooltip .row { display: flex; justify-content: space-between; gap: 12px; font-family: "JetBrains Mono", monospace; }
-  .tooltip .row .k { color: var(--muted); }
-  .tooltip .badge {
-    display: inline-block; padding: 2px 7px;
-    border: 1px solid var(--ink); background: var(--mustard);
-    font-family: "JetBrains Mono", monospace; font-size: 10px;
-    margin-top: 6px; transform: rotate(-2deg);
   }
 
   .status {
@@ -332,7 +326,7 @@
   </div>
   <div class="subbar">
     <span class="dot"></span>
-    <span>Where the action is in prediction markets.<sup style="color:var(--tomato)">*</sup></span>
+    <span>Visualize the volume and liquidity of prediction markets.<sup style="color:var(--tomato)">*</sup></span>
   </div>
 </header>
 
@@ -404,23 +398,19 @@
 (() => {
   const GAMMA = "https://gamma-api.polymarket.com";
 
-  // Categorical palette for "by category" view + multi-outcome fallbacks.
+  const SOURCES = {
+    polymarket: { dataFile: "./data.json",           label: "Polymarket", linkBase: "https://polymarket.com/market/" },
+    limitless:  { dataFile: "./data-limitless.json", label: "Limitless",  linkBase: "https://limitless.exchange/markets/" },
+  };
+
   const CATEGORY_PALETTE = [
     "#e0492e", "#d9a521", "#6b8e5a", "#2d6a8e", "#6a3d6e",
     "#b85431", "#2f5d3a", "#a87d2c", "#8b4a2f", "#3a6e7a",
     "#c4671f", "#7a8b3a", "#5b3a6e", "#9b3838", "#4a7a5b"
   ];
 
-  // Anything with a Yes price at or beyond these bounds is treated as
-  // already-resolved and hidden — even if it still shows 24h volume from
-  // settlement-day trading.
   const SETTLED_HI = 0.97;
   const SETTLED_LO = 0.03;
-
-  const SOURCES = {
-    polymarket: { dataFile: "./data.json",           label: "Polymarket", linkBase: "https://polymarket.com/market/" },
-    limitless:  { dataFile: "./data-limitless.json", label: "Limitless",  linkBase: "https://limitless.exchange/markets/" },
-  };
 
   const state = {
     markets: [],
@@ -444,7 +434,6 @@
   };
   const fmtPct = (p) => (p == null || isNaN(p)) ? "—" : (p * 100).toFixed(1) + "%";
 
-  // ---- fetch ----
   const ATTEMPT_LOG = [];
 
   async function fetchJson(url, label) {
@@ -457,7 +446,7 @@
         throw new Error(`HTTP ${res.status} from ${label}`);
       }
       const data = await res.json();
-      ATTEMPT_LOG.push(`${label}: ok (${ms}ms, ${Array.isArray(data) ? data.length : "?"} rows)`);
+      ATTEMPT_LOG.push(`${label}: ok (${ms}ms, ${Array.isArray(data) ? data.length : (data?.markets?.length ?? "?")} rows)`);
       return data;
     } catch (e) {
       const ms = Math.round(performance.now() - t0);
@@ -477,10 +466,9 @@
     try {
       const local = await fetchJson(localUrl, src.dataFile);
       raw = Array.isArray(local) ? local : (local.markets || []);
-      if (local.fetchedAt) ATTEMPT_LOG.push(`fetchedAt: ${local.fetchedAt}`);
-    } catch (_) {
-      // Live-API fallback only makes sense for Polymarket; Limitless data
-      // is workflow-baked only.
+      if (local && local.fetchedAt) ATTEMPT_LOG.push(`fetchedAt: ${local.fetchedAt}`);
+    } catch (err) {
+      // Live-API fallback only makes sense for Polymarket.
       if (state.source === "polymarket") {
         const path   = `/markets?active=true&closed=false&archived=false&order=volume&ascending=false&limit=300`;
         const direct = `${GAMMA}${path}`;
@@ -488,15 +476,15 @@
         const proxy2 = `https://api.allorigins.win/raw?url=` + encodeURIComponent(direct);
         try {
           raw = await fetchJson(direct, "direct");
-        } catch (__) {
+        } catch (e2) {
           try {
             raw = await fetchJson(proxy1, "corsproxy.io");
-          } catch (___) {
+          } catch (e3) {
             raw = await fetchJson(proxy2, "allorigins.win");
           }
         }
       } else {
-        throw _;
+        throw err;
       }
     }
 
@@ -514,9 +502,6 @@
     return all.slice(0, 50);
   }
 
-  // A market is treated as settled when its leading outcome is essentially
-  // certain. For binary markets that's Yes ≥ 97% or ≤ 3%; for multi-outcome
-  // markets it's any single outcome above the high bound.
   function isSettled(m) {
     if (m.isBinary) {
       if (m.yesPrice == null) return false;
@@ -544,14 +529,13 @@
     return null;
   }
 
-  // Last-resort category inference from market text — catches the long tail
-  // (single sports games, niche crypto pairs, etc.) that the API tag join misses.
+  // Last-resort category inference from market text.
   const INFER_PATTERNS = [
-    ["Sports", /\b(MLB|NFL|NBA|NHL|UFC|MMA|UEFA|FIFA|F1|Formula\s?1|NASCAR|premier league|champions league|la liga|bundesliga|serie a|world cup|playoffs?|super bowl|world series|stanley cup|nba finals?|march madness|ncaa|wimbledon|US Open|french open|australian open|grand slam|tennis|soccer|football|baseball|basketball|hockey|boxing|cricket|rugby|golf|PGA|chess|valorant|league of legends|dota|cs:?go|counter[- ]?strike|esports?|mariners|yankees|astros|dodgers|cubs|red sox|cardinals|nationals|brewers|tigers|orioles|guardians|rangers|royals|twins|white sox|braves|mets|phillies|marlins|reds|pirates|rockies|diamondbacks|padres|giants|angels|athletics|blue jays|rays|cowboys|patriots|chiefs|49ers|jets|eagles|packers|ravens|steelers|saints|broncos|colts|bills|seahawks|falcons|panthers|titans|jaguars|texans|browns|bengals|raiders|chargers|rams|cardinals|vikings|bears|lions|dolphins|commanders|warriors|lakers|celtics|nets|knicks|heat|bulls|spurs|76ers|suns|nuggets|thunder|mavericks|clippers|trail ?blazers|jazz|kings|hornets|timberwolves|grizzlies|magic|raptors|hawks|pistons|wizards|pacers|cavaliers|cavs|bucks|rockets|man(?:chester)?\s*united|man(?:chester)?\s*city|liverpool|arsenal|chelsea|tottenham|spurs|barcelona|real madrid|atletico|psg|bayern|juventus|milan|inter|napoli|dortmund|bvb|ajax|porto|benfica|celtic|rangers|gunners|reds|blues)\b/i],
-    ["Crypto", /\b(bitcoin|btc|ethereum|eth|solana|sol|polygon|matic|cardano|ada|xrp|ripple|dogecoin|doge|shiba|shib|crypto|stablecoin|usdt|usdc|defi|nft|halving|web3|altcoin|memecoin|blockchain|dapp|hodl|vitalik|saylor|binance|coinbase)\b/i],
-    ["Politics", /\b(trump|biden|harris|kamala|obama|vance|elect(?:ion|ed)?|presidential|senate|house|congress|gop|democrat|republican|primary|primaries|caucus|nominat|ballot|electoral|impeach|filibuster|inaug|vice[- ]?president|cabinet|fed(?:eral)?\s*reserve|fed chair|supreme court|scotus|prime minister|chancellor|macron|sunak|starmer|brexit|nato|kremlin|putin|zelensky|netanyahu|xi\s*jinping|geopolitic|tariff)\b/i],
-    ["AI / Tech", /\b(GPT|ChatGPT|OpenAI|Anthropic|Claude|Gemini|LLaMA|LLM|artificial intelligence|machine learning|stable diffusion|midjourney|dall-?e|sora|copilot|nvidia|TSMC|semiconductor|tesla|autopilot|FSD|cybertruck|spacex|starship|neuralink|apple|iphone|google|alphabet|microsoft|meta|facebook|amazon|aws)\b/i],
-    ["Pop Culture", /\b(oscar|grammy|emmy|golden globe|academy award|cannes|sundance|box office|netflix|disney|hbo|premiere|sequel|movie|film|album|tour|concert|tv show|series|episode|hot 100|chart-topping|spotify|youtube|tiktok|kardashian|swift|taylor swift|beyonce|drake|kendrick|rihanna|kanye|musk|elon)\b/i],
+    ["Sports", /\b(MLB|NFL|NBA|NHL|UFC|MMA|UEFA|FIFA|F1|Formula\s?1|NASCAR|premier league|champions league|world cup|playoffs?|super bowl|world series|stanley cup|march madness|ncaa|wimbledon|US Open|french open|grand slam|tennis|soccer|football|baseball|basketball|hockey|boxing|cricket|rugby|golf|PGA|esports?|valorant|league of legends|dota|cs:?go|mariners|yankees|astros|dodgers|cubs|red sox|cardinals|nationals|brewers|tigers|orioles|guardians|rangers|royals|twins|braves|mets|phillies|marlins|reds|pirates|rockies|diamondbacks|padres|giants|angels|athletics|blue jays|rays|cowboys|patriots|chiefs|49ers|jets|eagles|packers|ravens|steelers|saints|broncos|colts|bills|seahawks|falcons|panthers|titans|jaguars|texans|browns|bengals|raiders|chargers|rams|vikings|bears|lions|dolphins|commanders|warriors|lakers|celtics|nets|knicks|heat|bulls|spurs|76ers|suns|nuggets|thunder|mavericks|clippers|trail ?blazers|jazz|kings|hornets|timberwolves|grizzlies|magic|raptors|hawks|pistons|wizards|pacers|cavaliers|bucks|rockets|man(?:chester)?\s*united|man(?:chester)?\s*city|liverpool|arsenal|chelsea|tottenham|barcelona|real madrid|atletico|psg|bayern|juventus|milan|inter|napoli)\b/i],
+    ["Crypto", /\b(bitcoin|btc|ethereum|eth|solana|sol|polygon|matic|cardano|ada|xrp|ripple|dogecoin|doge|shiba|shib|crypto|stablecoin|usdt|usdc|defi|nft|halving|web3|altcoin|memecoin|blockchain|hodl|vitalik|saylor|binance|coinbase)\b/i],
+    ["Politics", /\b(trump|biden|harris|kamala|obama|vance|elect(?:ion|ed)?|presidential|senate|house|congress|gop|democrat|republican|primary|caucus|nominat|ballot|electoral|impeach|inaug|vice[- ]?president|cabinet|fed(?:eral)?\s*reserve|fed chair|supreme court|scotus|prime minister|chancellor|macron|sunak|starmer|brexit|nato|kremlin|putin|zelensky|netanyahu|xi\s*jinping|geopolitic|tariff)\b/i],
+    ["AI / Tech", /\b(GPT|ChatGPT|OpenAI|Anthropic|Claude|Gemini|LLaMA|LLM|artificial intelligence|machine learning|stable diffusion|midjourney|dall-?e|sora|copilot|nvidia|TSMC|semiconductor|tesla|autopilot|FSD|cybertruck|spacex|starship|neuralink|apple|iphone|google|alphabet|microsoft|meta|amazon)\b/i],
+    ["Pop Culture", /\b(oscar|grammy|emmy|golden globe|academy award|cannes|sundance|box office|netflix|disney|hbo|premiere|sequel|movie|film|album|tour|concert|tv show|series|episode|hot 100|spotify|youtube|tiktok|kardashian|swift|taylor swift|beyonce|drake|kendrick|rihanna|kanye|musk|elon)\b/i],
     ["Markets / Econ", /\b(S&P|SPY|NASDAQ|dow jones|earnings|GDP|CPI|inflation|recession|interest rate|rate cut|rate hike|jobs report|unemployment|housing market|FOMC|treasury yield)\b/i],
   ];
   function inferFromText(text) {
@@ -573,7 +557,6 @@
       if (ev?.category) return ev.category;
     }
     if (m.category) return m.category;
-    // Final fallback: infer from question + event title text.
     const text = [m.question, ...(events.map(e => e?.title).filter(Boolean))].join(" ");
     cat = inferFromText(text);
     if (cat) return cat;
@@ -593,6 +576,7 @@
       id: m.id || m.conditionId || m.slug,
       question: m.question || m.slug || "Untitled market",
       slug: m.slug,
+      _link: m._link || null,
       icon: m.icon || m.image,
       volume, liquidity, volume24hr,
       yesPrice,
@@ -603,8 +587,7 @@
     };
   }
 
-  // ---- color ----
-  // Yes-price gradient: rust (No-leaning) → mustard (toss-up) → forest (Yes-leaning).
+  // ---- color: yes-price gradient ----
   function priceColor(p) {
     if (p == null) return "#8b7355";
     if (p < 0.5) {
@@ -631,7 +614,6 @@
     return lum > 150 ? "#1a1410" : "#fff7e6";
   }
 
-  // ---- hierarchy ----
   function buildHierarchy() {
     const metric = state.metric;
     if (state.view === "markets") {
@@ -661,7 +643,6 @@
     return { name: "root", children };
   }
 
-  // ---- render ----
   function render() {
     if (state.loading || state.error) return;
 
@@ -868,7 +849,6 @@
   function row(k, v) { return `<div class="row"><span class="k">${k}</span><span>${v}</span></div>`; }
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
-  // ---- wiring ----
   function bindTabs(containerSel, key) {
     document.querySelectorAll(containerSel + " button").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -921,4 +901,21 @@
       const log = (ATTEMPT_LOG.length ? ATTEMPT_LOG : ["no attempts logged"]).map(escapeHtml).join("<br/>");
       $("#status").innerHTML = `
         <div class="err">Couldn't load data</div>
-        <div style="max
+        <div style="max-width:520px;text-align:center;color:var(--muted)">
+          ${escapeHtml(err.message)}.<br/>
+          The page reads a static data file refreshed every ~10 minutes by a scheduled job, with the live API as backup for Polymarket.
+        </div>
+        <details style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);max-width:520px;text-align:left;border:1px dashed var(--ink);padding:8px;background:var(--paper-2)">
+          <summary style="cursor:pointer;color:var(--ink)">diagnostics</summary>
+          <div style="margin-top:6px;line-height:1.5">${log}</div>
+        </details>
+        <button class="iconbtn" id="retryBtn" style="margin-top:6px">Retry ↻</button>`;
+      document.getElementById("retryBtn")?.addEventListener("click", () => load());
+    }
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>
