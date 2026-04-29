@@ -337,7 +337,12 @@
 </header>
 
 <div class="controls">
-  <span class="label">view</span>
+  <span class="label">source</span>
+  <div class="seg" id="sourceTabs">
+    <button data-source="polymarket" class="active">Polymarket</button>
+    <button data-source="limitless">Limitless</button>
+  </div>
+  <span class="label" style="margin-left:8px;">view</span>
   <div class="seg" id="viewTabs">
     <button data-view="markets" class="active">top 50 markets</button>
     <button data-view="categories">top categories</button>
@@ -412,8 +417,14 @@
   const SETTLED_HI = 0.97;
   const SETTLED_LO = 0.03;
 
+  const SOURCES = {
+    polymarket: { dataFile: "./data.json",           label: "Polymarket", linkBase: "https://polymarket.com/market/" },
+    limitless:  { dataFile: "./data-limitless.json", label: "Limitless",  linkBase: "https://limitless.exchange/markets/" },
+  };
+
   const state = {
     markets: [],
+    source: localStorage.getItem("source") || "polymarket",
     view: "markets",
     metric: "volume24hr",
     loading: true,
@@ -459,26 +470,33 @@
 
   async function fetchTopMarkets() {
     ATTEMPT_LOG.length = 0;
-    const localUrl = `./data.json?t=${Math.floor(Date.now() / 60000)}`;
-    const path     = `/markets?active=true&closed=false&archived=false&order=volume&ascending=false&limit=300`;
-    const direct   = `${GAMMA}${path}`;
-    const proxy1   = `https://corsproxy.io/?` + encodeURIComponent(direct);
-    const proxy2   = `https://api.allorigins.win/raw?url=` + encodeURIComponent(direct);
+    const src = SOURCES[state.source] || SOURCES.polymarket;
+    const localUrl = `${src.dataFile}?t=${Math.floor(Date.now() / 60000)}`;
 
     let raw;
     try {
-      const local = await fetchJson(localUrl, "data.json");
+      const local = await fetchJson(localUrl, src.dataFile);
       raw = Array.isArray(local) ? local : (local.markets || []);
-      if (local.fetchedAt) ATTEMPT_LOG.push(`data.json fetchedAt: ${local.fetchedAt}`);
+      if (local.fetchedAt) ATTEMPT_LOG.push(`fetchedAt: ${local.fetchedAt}`);
     } catch (_) {
-      try {
-        raw = await fetchJson(direct, "direct");
-      } catch (__) {
+      // Live-API fallback only makes sense for Polymarket; Limitless data
+      // is workflow-baked only.
+      if (state.source === "polymarket") {
+        const path   = `/markets?active=true&closed=false&archived=false&order=volume&ascending=false&limit=300`;
+        const direct = `${GAMMA}${path}`;
+        const proxy1 = `https://corsproxy.io/?` + encodeURIComponent(direct);
+        const proxy2 = `https://api.allorigins.win/raw?url=` + encodeURIComponent(direct);
         try {
-          raw = await fetchJson(proxy1, "corsproxy.io");
-        } catch (___) {
-          raw = await fetchJson(proxy2, "allorigins.win");
+          raw = await fetchJson(direct, "direct");
+        } catch (__) {
+          try {
+            raw = await fetchJson(proxy1, "corsproxy.io");
+          } catch (___) {
+            raw = await fetchJson(proxy2, "allorigins.win");
+          }
         }
+      } else {
+        throw _;
       }
     }
 
@@ -489,6 +507,10 @@
       .filter(m => m && m.volume24hr > 0 && !isSettled(m));
 
     all.sort((a, b) => b.volume24hr - a.volume24hr);
+
+    if (all.length === 0) {
+      throw new Error(`No active ${src.label} markets right now.`);
+    }
     return all.slice(0, 50);
   }
 
@@ -749,9 +771,11 @@
       .on("mousemove", (e, d) => showTooltip(e, d))
       .on("mouseleave", hideTooltip)
       .on("click", (_, d) => {
-        if (state.view === "markets" && d.data.slug) {
-          window.open(`https://polymarket.com/market/${d.data.slug}`, "_blank", "noopener");
-        }
+        if (state.view !== "markets") return;
+        const explicit = d.data._link;
+        const linkBase = (SOURCES[state.source] || SOURCES.polymarket).linkBase;
+        const url = explicit || (d.data.slug ? `${linkBase}${d.data.slug}` : null);
+        if (url) window.open(url, "_blank", "noopener");
       });
 
     renderMarquee();
@@ -857,6 +881,22 @@
   }
   bindTabs("#viewTabs", "view");
   bindTabs("#metricTabs", "metric");
+
+  // Source toggle: changing source re-fetches and re-renders.
+  document.querySelectorAll("#sourceTabs button").forEach(btn => {
+    if (btn.dataset.source === state.source) {
+      document.querySelectorAll("#sourceTabs button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+    }
+    btn.addEventListener("click", () => {
+      if (btn.dataset.source === state.source) return;
+      document.querySelectorAll("#sourceTabs button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.source = btn.dataset.source;
+      try { localStorage.setItem("source", state.source); } catch {}
+      load();
+    });
+  });
 
   $("#refreshBtn").addEventListener("click", () => load());
 
