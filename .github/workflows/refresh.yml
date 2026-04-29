@@ -174,23 +174,24 @@ jobs:
               json.dump(payload, f, separators=(",", ":"))
           PY
 
-      # ---------- Limitless (best-effort) ----------
+      # ---------- Limitless ----------
       - name: Fetch Limitless markets
         run: |
           set +e
-          # Try a few likely public endpoints. If all fail, write an empty list
-          # so the page can show a clean "no data" state without breaking.
+          # Limitless paginates — try the largest sensible page first, then
+          # smaller fallbacks if the limit is rejected. Empty file ⇒ workflow
+          # still writes a clean data-limitless.json with zero markets.
           for URL in \
-            "https://api.limitless.exchange/markets/active" \
-            "https://api.limitless.exchange/markets" \
-            "https://api.limitless.exchange/v1/markets"; do
+            "https://api.limitless.exchange/markets/active?limit=200&sortBy=volume" \
+            "https://api.limitless.exchange/markets/active?limit=100" \
+            "https://api.limitless.exchange/markets/active"; do
             echo "Trying $URL"
             if curl -sSf -H "accept: application/json" --max-time 20 "$URL" -o limitless_raw.json; then
               echo "Got data from $URL"
               break
             fi
           done
-          if [ ! -s limitless_raw.json ]; then echo '[]' > limitless_raw.json; fi
+          if [ ! -s limitless_raw.json ]; then echo '{"data":[]}' > limitless_raw.json; fi
           set -e
 
       - name: Build data-limitless.json
@@ -199,74 +200,120 @@ jobs:
           import json, datetime
 
           try:
-              raw = json.load(open("limitless_raw.json"))
+              payload = json.load(open("limitless_raw.json"))
           except Exception:
-              raw = []
-          if isinstance(raw, dict):
-              for k in ("markets", "data", "items", "results"):
-                  if isinstance(raw.get(k), list):
-                      raw = raw[k]; break
-              else:
-                  raw = []
+              payload = {"data": []}
+          # Limitless wraps everything in {"data":[...], "totalMarketsCount":N}.
+          # Tolerate the bare-array case too.
+          raw = payload.get("data") if isinstance(payload, dict) else payload
           if not isinstance(raw, list):
               raw = []
 
-          def num(x, default=0):
+          def num(x, default=0.0):
+              if x is None:
+                  return default
               try:
-                  return float(x) if x is not None else default
+                  return float(x)
               except (TypeError, ValueError):
                   return default
+
+          # Strip generic / time-bucket categories so the heatmap groups
+          # by topic instead of by frequency.
+          GENERIC_CATS = {"hourly", "daily", "weekly", "monthly", "recurring",
+                          "all", "trending", "featured", "new"}
+
+          def pick_category(m):
+              for c in (m.get("categories") or []):
+                  if isinstance(c, str) and c.strip() and c.strip().lower() not in GENERIC_CATS:
+                      return c.strip()
+              for t in (m.get("tags") or []):
+                  if isinstance(t, str) and t.strip() and t.strip().lower() not in GENERIC_CATS:
+                      return t.strip()
+              # Last resort: at least surface the time-bucket so it isn't all "Other".
+              cats = m.get("categories") or []
+              if cats and isinstance(cats[0], str): return cats[0]
+              return "Other"
 
           markets = []
           for m in raw:
               if not isinstance(m, dict): continue
-              question = m.get("title") or m.get("question") or m.get("name") or m.get("slug") or ""
-              slug     = m.get("slug") or str(m.get("id") or m.get("address") or "")
-              volume     = num(m.get("volume") or m.get("totalVolume") or m.get("volumeFormatted") or m.get("volumeUSD"))
-              liquidity  = num(m.get("liquidity") or m.get("totalLiquidity") or m.get("liquidityFormatted"))
-              volume24hr = num(m.get("volume24hr") or m.get("volume24h") or m.get("dailyVolume"))
-              yp = m.get("yesPrice") or m.get("probability") or m.get("price")
-              try:
-                  yp = float(yp) if yp is not None else None
-              except (TypeError, ValueError):
-                  yp = None
-              if yp is not None and yp > 1.5:
-                  yp /= 100.0
+              title = m.get("title") or m.get("name") or m.get("slug") or ""
+              slug  = m.get("slug") or str(m.get("id") or m.get("address") or "")
+
+              # *Formatted fields are already in human-readable USDC.
+              volume    = num(m.get("volumeFormatted"))
+              liquidity = num(m.get("liquidityFormatted"))
+              if volume == 0.0 and m.get("volume"):
+                  decimals = (m.get("collateralToken") or {}).get("decimals") or 6
+                  volume = num(m.get("volume")) / (10 ** decimals)
+              if liquidity == 0.0 and m.get("liquidity"):
+                  decimals = (m.get("collateralToken") or {}).get("decimals") or 6
+                  liquidity = num(m.get("liquidity")) / (10 ** decimals)
+
+              # prices = [yesPercent, noPercent] in 0–100 range.
+              prices = m.get("prices") or []
+              yp = None
+              if isinstance(prices, list) and prices:
+                  yp = num(prices[0], default=None)
+                  if yp is not None and yp > 1.5:
+                      yp /= 100.0
               if yp is None:
                   yp = 0.5
+
               markets.append({
                   "id": str(m.get("id") or m.get("address") or slug),
                   "conditionId": m.get("conditionId") or m.get("address"),
                   "slug": slug,
-                  "question": question,
+                  "question": title,
                   "volumeNum": volume,
                   "liquidityNum": liquidity,
-                  "volume24hr": volume24hr,
+                  # Limitless doesn't expose a 24h volume field; total volume is
+                  # the closest stand-in (and most Limitless markets are short
+                  # duration anyway, so the gap is small in practice).
+                  "volume24hr": volume,
                   "outcomes": '["Yes","No"]',
                   "outcomePrices": json.dumps([str(yp), str(round(1 - yp, 6))]),
-                  "_category": m.get("category") or "Other",
-                  "_link": m.get("url") or m.get("permalink") or (f"https://limitless.exchange/markets/{slug}" if slug else None),
+                  "_category": pick_category(m),
+                  "_link": f"https://limitless.exchange/markets/{slug}" if slug else None,
               })
 
-          payload = {
+          out = {
               "fetchedAt": datetime.datetime.utcnow().isoformat() + "Z",
               "count": len(markets),
               "markets": markets,
               "source": "limitless",
           }
           with open("data-limitless.json", "w") as f:
-              json.dump(payload, f, separators=(",", ":"))
+              json.dump(out, f, separators=(",", ":"))
           print(f"Wrote {len(markets)} Limitless markets")
           PY
 
       - name: Cleanup intermediate files
         run: rm -f markets.json events_volume.json events_24h.json limitless_raw.json
 
+      - name: Show generated data files
+        run: |
+          echo "--- ls -la for data files ---"
+          ls -la data*.json categories_cache.json 2>&1 || true
+          echo "--- data.json head ---"
+          head -c 200 data.json 2>&1 || echo "data.json missing"
+          echo
+          echo "--- data-limitless.json head ---"
+          head -c 200 data-limitless.json 2>&1 || echo "data-limitless.json missing"
+          echo
+
       - name: Commit if changed
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data.json data-limitless.json categories_cache.json 2>/dev/null || true
+          # Stage each file independently so a missing one doesn't abort the rest.
+          for f in data.json data-limitless.json categories_cache.json; do
+            if [ -f "$f" ]; then
+              git add "$f" && echo "staged $f"
+            else
+              echo "skip $f (not present)"
+            fi
+          done
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
