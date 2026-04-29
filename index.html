@@ -326,7 +326,7 @@
   </div>
   <div class="subbar">
     <span class="dot"></span>
-    <span>Visualize the volume and liquidity of prediction markets.<sup style="color:var(--tomato)">*</sup></span>
+    <span>Visualize the volume and liquidity of prediction markets.</span>
   </div>
 </header>
 
@@ -353,10 +353,10 @@
 <main>
 
   <div class="stats-row" id="statsRow">
-    <div class="stat"><div class="k">total volume · top 50</div><div class="v" id="statVol">—</div></div>
-    <div class="stat"><div class="k">last 24h volume</div><div class="v" id="stat24">—</div></div>
-    <div class="stat"><div class="k">total liquidity</div><div class="v" id="statLiq">—</div></div>
-    <div class="stat"><div class="k">categories tracked</div><div class="v" id="statN">—</div></div>
+    <div class="stat"><div class="k" id="kVol">total volume · top 50</div><div class="v" id="statVol">—</div></div>
+    <div class="stat"><div class="k" id="k24">last 24h volume</div><div class="v" id="stat24">—</div></div>
+    <div class="stat"><div class="k" id="kLiq">total liquidity</div><div class="v" id="statLiq">—</div></div>
+    <div class="stat"><div class="k" id="kN">categories tracked</div><div class="v" id="statN">—</div></div>
   </div>
 
   <div class="section-head">
@@ -588,17 +588,18 @@
   }
 
   // ---- color: yes-price gradient ----
-  // Square-root curve so the gradient accelerates away from the mustard
-  // midpoint — a 60% Yes market reads as clearly green, not yellow-green.
+  // Aggressive power curve so even a small lean off 50% reads as green/red.
+  // At 55% Yes, the cell is already ~50% of the way from mustard to green.
+  const COLOR_CURVE = 0.3;
   function priceColor(p) {
     if (p == null) return "#8b7355";
     if (p < 0.5) {
-      const t = (0.5 - p) / 0.5;            // 1 at p=0, 0 at p=0.5
-      const tt = Math.sqrt(t);              // accelerate toward red
+      const t = (0.5 - p) / 0.5;                  // 1 at p=0, 0 at p=0.5
+      const tt = Math.pow(t, COLOR_CURVE);        // accelerate toward red
       return d3.interpolateRgb("#d9a521", "#c4452a")(tt);
     } else {
-      const t = (p - 0.5) / 0.5;            // 0 at p=0.5, 1 at p=1
-      const tt = Math.sqrt(t);              // accelerate toward green
+      const t = (p - 0.5) / 0.5;                  // 0 at p=0.5, 1 at p=1
+      const tt = Math.pow(t, COLOR_CURVE);        // accelerate toward green
       return d3.interpolateRgb("#d9a521", "#3d8a45")(tt);
     }
   }
@@ -654,13 +655,18 @@
     const tot24 = d3.sum(state.markets, m => m.volume24hr);
     const totLiq = d3.sum(state.markets, m => m.liquidity);
     const cats = new Set(state.markets.map(m => m.category)).size;
+    const srcName = (SOURCES[state.source] || SOURCES.polymarket).label;
+    $("#kVol").textContent = `${srcName} · total volume · top 50`;
+    $("#k24").textContent  = `${srcName} · last 24h volume`;
+    $("#kLiq").textContent = `${srcName} · total liquidity`;
+    $("#kN").textContent   = `${srcName} · categories tracked`;
     $("#statVol").innerHTML = fmtUsd(tot) + ' <small>USDC</small>';
     $("#stat24").innerHTML  = fmtUsd(tot24) + ' <small>USDC</small>';
     $("#statLiq").innerHTML = fmtUsd(totLiq) + ' <small>USDC</small>';
     $("#statN").textContent = cats;
 
     const metricLabel = { volume: "total volume", volume24hr: "24h volume", liquidity: "liquidity" }[state.metric];
-    const viewLabel   = state.view === "markets" ? "Top 50 markets" : "By category";
+    const viewLabel   = state.view === "markets" ? `Top 50 ${srcName} markets` : `${srcName} by category`;
     $("#sectionTitle").textContent = `${viewLabel} · sized by ${metricLabel}`;
     $("#sectionMeta").textContent  = state.view === "markets"
       ? `showing ${state.markets.length} of the most active markets`
