@@ -432,11 +432,51 @@
   const fmtPct = (p) => (p == null || isNaN(p)) ? "—" : (p * 100).toFixed(1) + "%";
 
   // ----- Fetch -----
+  // Try the Gamma API directly. If the browser blocks it (CORS, network,
+  // edge filtering), retry via a public CORS proxy. Each attempt is logged
+  // so the error UI can show what actually went wrong.
+  const ATTEMPT_LOG = [];
+
+  async function fetchJson(url, label) {
+    const t0 = performance.now();
+    try {
+      const res = await fetch(url, { headers: { accept: "application/json" } });
+      const ms = Math.round(performance.now() - t0);
+      if (!res.ok) {
+        ATTEMPT_LOG.push(`${label}: HTTP ${res.status} (${ms}ms)`);
+        throw new Error(`HTTP ${res.status} from ${label}`);
+      }
+      const data = await res.json();
+      ATTEMPT_LOG.push(`${label}: ok (${ms}ms, ${Array.isArray(data) ? data.length : "?"} rows)`);
+      return data;
+    } catch (e) {
+      const ms = Math.round(performance.now() - t0);
+      if (!ATTEMPT_LOG[ATTEMPT_LOG.length - 1]?.startsWith(label)) {
+        ATTEMPT_LOG.push(`${label}: ${e.message || e} (${ms}ms)`);
+      }
+      throw e;
+    }
+  }
+
   async function fetchTopMarkets() {
-    const url = `${GAMMA}/markets?active=true&closed=false&archived=false&order=volumeNum&ascending=false&limit=100`;
-    const res = await fetch(url, { headers: { accept: "application/json" } });
-    if (!res.ok) throw new Error(`Gamma API ${res.status}`);
-    const raw = await res.json();
+    ATTEMPT_LOG.length = 0;
+    const path = `/markets?active=true&closed=false&archived=false&order=volume&ascending=false&limit=100`;
+    const direct  = `${GAMMA}${path}`;
+    const proxy1  = `https://corsproxy.io/?` + encodeURIComponent(direct);
+    const proxy2  = `https://api.allorigins.win/raw?url=` + encodeURIComponent(direct);
+
+    let raw;
+    try {
+      raw = await fetchJson(direct, "direct");
+    } catch (_) {
+      try {
+        raw = await fetchJson(proxy1, "corsproxy.io");
+      } catch (__) {
+        raw = await fetchJson(proxy2, "allorigins.win");
+      }
+    }
+
+    if (!Array.isArray(raw)) throw new Error("Unexpected response shape");
     return raw.map(normalizeMarket).filter(m => m && m.volume > 0).slice(0, 50);
   }
   function safeJson(s) {
@@ -770,9 +810,18 @@
     } catch (err) {
       state.loading = false;
       state.error = err;
+      const log = (ATTEMPT_LOG.length ? ATTEMPT_LOG : ["no attempts logged"]).map(escapeHtml).join("<br/>");
       $("#status").innerHTML = `
         <div class="err">!! the press jammed</div>
-        <div style="max-width:420px;text-align:center;color:var(--muted)">${escapeHtml(err.message)}.<br/>this page calls the Gamma API directly from your browser.</div>
+        <div style="max-width:520px;text-align:center;color:var(--muted)">
+          ${escapeHtml(err.message)}.<br/>
+          this page calls the Gamma API directly from your browser, with a CORS proxy as backup.
+        </div>
+        <details style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);max-width:520px;text-align:left;border:1px dashed var(--ink);padding:8px;background:var(--paper-2)">
+          <summary style="cursor:pointer;color:var(--ink)">diagnostics</summary>
+          <div style="margin-top:6px;line-height:1.5">${log}</div>
+          <div style="margin-top:8px;color:var(--muted)">most common causes: ad-blocker rule on <code>polymarket.com</code>, browser CORS policy, or regional edge filtering. open DevTools → Network for the full story.</div>
+        </details>
         <button class="iconbtn" id="retryBtn" style="margin-top:6px">try again ↻</button>`;
       document.getElementById("retryBtn")?.addEventListener("click", () => load());
     }
