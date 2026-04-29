@@ -457,6 +457,62 @@
     }
   }
 
+  // Tags that aren't actual topic categories — Limitless uses them as
+  // internal flags ("Lumy" = their AMM bot, "Simple Mode" = a UI variant).
+  const LIMITLESS_NOISE = /^(lumy|simple mode|manual|amm|clob|negrisk|single|hourly|daily|weekly|monthly|recurring|live|24h|automated|sports automation|auto|all|trending|featured|new)$/i;
+  const LIMITLESS_TAG_MAP = {
+    crypto: "Crypto", bitcoin: "Crypto", btc: "Crypto", ethereum: "Crypto",
+    eth: "Crypto", solana: "Crypto", doge: "Crypto", memecoin: "Crypto", memecoins: "Crypto",
+    stocks: "Markets / Econ", stock: "Markets / Econ",
+    spx: "Markets / Econ", "s&p": "Markets / Econ", nasdaq: "Markets / Econ",
+    tesla: "Markets / Econ", nvidia: "Markets / Econ", apple: "Markets / Econ",
+    sports: "Sports", nfl: "Sports", nba: "Sports", mlb: "Sports",
+    ufc: "Sports", soccer: "Sports", tennis: "Sports",
+    politics: "Politics", elections: "Politics",
+    ai: "AI / Tech", tech: "AI / Tech",
+    weather: "Weather / Climate", climate: "Weather / Climate",
+  };
+  function pickLimitlessCategory(m) {
+    const sources = [m.categories || [], m.tags || []];
+    for (const list of sources) {
+      for (const t of list) {
+        if (typeof t !== "string") continue;
+        const norm = t.trim().toLowerCase();
+        if (!norm || LIMITLESS_NOISE.test(norm)) continue;
+        if (LIMITLESS_TAG_MAP[norm]) return LIMITLESS_TAG_MAP[norm];
+      }
+    }
+    return null; // let page-side text inference pick from the question text
+  }
+
+  // Reshape a raw Limitless API response into the same field names the
+  // Polymarket-shaped normalizer expects.
+  function reshapeLimitless(payload) {
+    const arr = Array.isArray(payload) ? payload : (payload?.data || []);
+    return arr.map(m => {
+      const prices = Array.isArray(m.prices) ? m.prices : [];
+      let yp = (prices.length && prices[0] != null) ? Number(prices[0]) : 50;
+      if (!Number.isFinite(yp)) yp = 50;
+      if (yp > 1.5) yp = yp / 100;
+      const vol = Number(m.volumeFormatted) || 0;
+      const liq = Number(m.liquidityFormatted) || 0;
+      const slug = m.slug || String(m.id || m.address || "");
+      return {
+        id: String(m.id || m.address || slug),
+        conditionId: m.conditionId || m.address,
+        slug,
+        question: m.title || m.name || slug,
+        volumeNum: vol,
+        liquidityNum: liq,
+        volume24hr: vol,
+        outcomes: '["Yes","No"]',
+        outcomePrices: JSON.stringify([String(yp), String(Math.max(0, 1 - yp).toFixed(6))]),
+        _category: pickLimitlessCategory(m),
+        _link: slug ? `https://limitless.exchange/markets/${slug}` : null,
+      };
+    });
+  }
+
   async function fetchTopMarkets() {
     ATTEMPT_LOG.length = 0;
     const src = SOURCES[state.source] || SOURCES.polymarket;
@@ -468,7 +524,6 @@
       raw = Array.isArray(local) ? local : (local.markets || []);
       if (local && local.fetchedAt) ATTEMPT_LOG.push(`fetchedAt: ${local.fetchedAt}`);
     } catch (err) {
-      // Live-API fallback only makes sense for Polymarket.
       if (state.source === "polymarket") {
         const path   = `/markets?active=true&closed=false&archived=false&order=volume&ascending=false&limit=300`;
         const direct = `${GAMMA}${path}`;
@@ -482,6 +537,17 @@
           } catch (e3) {
             raw = await fetchJson(proxy2, "allorigins.win");
           }
+        }
+      } else if (state.source === "limitless") {
+        // Fall back to Limitless's public API directly from the browser.
+        const direct = "https://api.limitless.exchange/markets/active?limit=200";
+        const proxy1 = `https://corsproxy.io/?` + encodeURIComponent(direct);
+        try {
+          const live = await fetchJson(direct, "limitless-live");
+          raw = reshapeLimitless(live);
+        } catch (e2) {
+          const live = await fetchJson(proxy1, "limitless-proxy");
+          raw = reshapeLimitless(live);
         }
       } else {
         throw err;
@@ -529,13 +595,15 @@
     return null;
   }
 
-  // Last-resort category inference from market text.
+  // Last-resort category inference from market text. Order matters — first
+  // match wins, so put the more specific patterns above the broader ones.
   const INFER_PATTERNS = [
+    ["World / Geopolitics", /\b(iran|iranian|israel|israeli|ukraine|ukrainian|russia|russian|china|chinese|north korea|kim jong|putin|zelensky|netanyahu|xi\s*jinping|mojtaba|khamenei|ayatollah|war|middle east|gaza|hamas|hezbollah|houthi|syria|lebanon|venezuela|maduro|ceasefire|hostage|airstrike|invasion|sanctions|nato|brexit|european union|eu summit|tariff|geopolitic|taiwan|south china sea|kremlin|moscow|tehran|beijing|pyongyang|jerusalem|kyiv|moscow)\b/i],
     ["Sports", /\b(MLB|NFL|NBA|NHL|UFC|MMA|UEFA|FIFA|F1|Formula\s?1|NASCAR|premier league|champions league|world cup|playoffs?|super bowl|world series|stanley cup|march madness|ncaa|wimbledon|US Open|french open|grand slam|tennis|soccer|football|baseball|basketball|hockey|boxing|cricket|rugby|golf|PGA|esports?|valorant|league of legends|dota|cs:?go|mariners|yankees|astros|dodgers|cubs|red sox|cardinals|nationals|brewers|tigers|orioles|guardians|rangers|royals|twins|braves|mets|phillies|marlins|reds|pirates|rockies|diamondbacks|padres|giants|angels|athletics|blue jays|rays|cowboys|patriots|chiefs|49ers|jets|eagles|packers|ravens|steelers|saints|broncos|colts|bills|seahawks|falcons|panthers|titans|jaguars|texans|browns|bengals|raiders|chargers|rams|vikings|bears|lions|dolphins|commanders|warriors|lakers|celtics|nets|knicks|heat|bulls|spurs|76ers|suns|nuggets|thunder|mavericks|clippers|trail ?blazers|jazz|kings|hornets|timberwolves|grizzlies|magic|raptors|hawks|pistons|wizards|pacers|cavaliers|bucks|rockets|man(?:chester)?\s*united|man(?:chester)?\s*city|liverpool|arsenal|chelsea|tottenham|barcelona|real madrid|atletico|psg|bayern|juventus|milan|inter|napoli)\b/i],
     ["Crypto", /\b(bitcoin|btc|ethereum|eth|solana|sol|polygon|matic|cardano|ada|xrp|ripple|dogecoin|doge|shiba|shib|crypto|stablecoin|usdt|usdc|defi|nft|halving|web3|altcoin|memecoin|blockchain|hodl|vitalik|saylor|binance|coinbase)\b/i],
-    ["Politics", /\b(trump|biden|harris|kamala|obama|vance|elect(?:ion|ed)?|presidential|senate|house|congress|gop|democrat|republican|primary|caucus|nominat|ballot|electoral|impeach|inaug|vice[- ]?president|cabinet|fed(?:eral)?\s*reserve|fed chair|supreme court|scotus|prime minister|chancellor|macron|sunak|starmer|brexit|nato|kremlin|putin|zelensky|netanyahu|xi\s*jinping|geopolitic|tariff)\b/i],
+    ["Politics", /\b(trump|biden|harris|kamala|obama|vance|elect(?:ion|ed)?|presidential|senate|house|congress|gop|democrat|republican|primary|caucus|nominat|ballot|electoral|impeach|inaug|vice[- ]?president|cabinet|fed(?:eral)?\s*reserve|fed chair|supreme court|scotus|prime minister|chancellor|macron|sunak|starmer)\b/i],
     ["AI / Tech", /\b(GPT|ChatGPT|OpenAI|Anthropic|Claude|Gemini|LLaMA|LLM|artificial intelligence|machine learning|stable diffusion|midjourney|dall-?e|sora|copilot|nvidia|TSMC|semiconductor|tesla|autopilot|FSD|cybertruck|spacex|starship|neuralink|apple|iphone|google|alphabet|microsoft|meta|amazon)\b/i],
-    ["Pop Culture", /\b(oscar|grammy|emmy|golden globe|academy award|cannes|sundance|box office|netflix|disney|hbo|premiere|sequel|movie|film|album|tour|concert|tv show|series|episode|hot 100|spotify|youtube|tiktok|kardashian|swift|taylor swift|beyonce|drake|kendrick|rihanna|kanye|musk|elon)\b/i],
+    ["Pop Culture", /\b(oscar|grammy|emmy|golden globe|academy award|cannes|sundance|box office|netflix|disney|hbo|premiere|sequel|movie|film|album|tour|concert|tv show|series|episode|hot 100|spotify|youtube|tiktok|kardashian|swift|taylor swift|beyonce|drake|kendrick|rihanna|kanye)\b/i],
     ["Markets / Econ", /\b(S&P|SPY|NASDAQ|dow jones|earnings|GDP|CPI|inflation|recession|interest rate|rate cut|rate hike|jobs report|unemployment|housing market|FOMC|treasury yield)\b/i],
   ];
   function inferFromText(text) {

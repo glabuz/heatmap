@@ -44,13 +44,88 @@ jobs:
                             "Pop Culture", "Markets / Econ", "World / Geopolitics",
                             "Weather / Climate", "Other"]
 
+          # Map specific Polymarket tags to one of our broad categories so the
+          # heatmap doesn't end up with one-off categories like "Mojtaba".
+          TAG_MAPPING = {
+              # Politics (US-domestic)
+              "politics": "Politics", "us politics": "Politics",
+              "elections": "Politics", "election": "Politics", "2024 election": "Politics",
+              "trump": "Politics", "biden": "Politics", "harris": "Politics",
+              "kamala": "Politics", "vance": "Politics", "obama": "Politics",
+              "supreme court": "Politics", "scotus": "Politics",
+              "senate": "Politics", "house": "Politics", "congress": "Politics",
+              "president": "Politics", "presidential": "Politics",
+              "democrat": "Politics", "republican": "Politics", "gop": "Politics",
+              # Sports
+              "sports": "Sports", "nfl": "Sports", "nba": "Sports", "mlb": "Sports",
+              "nhl": "Sports", "ufc": "Sports", "mma": "Sports", "boxing": "Sports",
+              "soccer": "Sports", "football": "Sports", "tennis": "Sports",
+              "golf": "Sports", "f1": "Sports", "formula 1": "Sports",
+              "nascar": "Sports", "olympics": "Sports", "world cup": "Sports",
+              "champions league": "Sports", "premier league": "Sports",
+              "march madness": "Sports", "ncaa": "Sports", "esports": "Sports",
+              "valorant": "Sports", "league of legends": "Sports", "csgo": "Sports",
+              # Crypto
+              "crypto": "Crypto", "cryptocurrency": "Crypto",
+              "bitcoin": "Crypto", "btc": "Crypto",
+              "ethereum": "Crypto", "eth": "Crypto",
+              "solana": "Crypto", "sol": "Crypto",
+              "memecoins": "Crypto", "memecoin": "Crypto",
+              "defi": "Crypto", "nft": "Crypto", "stablecoin": "Crypto",
+              # AI / Tech
+              "ai": "AI / Tech", "artificial intelligence": "AI / Tech",
+              "tech": "AI / Tech", "technology": "AI / Tech",
+              "openai": "AI / Tech", "chatgpt": "AI / Tech", "anthropic": "AI / Tech",
+              "google": "AI / Tech", "apple": "AI / Tech", "microsoft": "AI / Tech",
+              "tesla": "AI / Tech", "spacex": "AI / Tech",
+              "elon musk": "AI / Tech", "musk": "AI / Tech",
+              # World / Geopolitics
+              "geopolitics": "World / Geopolitics", "world": "World / Geopolitics",
+              "international": "World / Geopolitics",
+              "iran": "World / Geopolitics", "israel": "World / Geopolitics",
+              "ukraine": "World / Geopolitics", "russia": "World / Geopolitics",
+              "china": "World / Geopolitics", "north korea": "World / Geopolitics",
+              "putin": "World / Geopolitics", "zelensky": "World / Geopolitics",
+              "netanyahu": "World / Geopolitics",
+              "xi jinping": "World / Geopolitics", "xi": "World / Geopolitics",
+              "war": "World / Geopolitics", "middle east": "World / Geopolitics",
+              "gaza": "World / Geopolitics", "hamas": "World / Geopolitics",
+              "hezbollah": "World / Geopolitics", "houthi": "World / Geopolitics",
+              "syria": "World / Geopolitics", "lebanon": "World / Geopolitics",
+              "venezuela": "World / Geopolitics", "maduro": "World / Geopolitics",
+              "mojtaba": "World / Geopolitics", "khamenei": "World / Geopolitics",
+              "ayatollah": "World / Geopolitics",
+              "nato": "World / Geopolitics", "brexit": "World / Geopolitics",
+              "european union": "World / Geopolitics", "eu": "World / Geopolitics",
+              "tariffs": "World / Geopolitics", "tariff": "World / Geopolitics",
+              # Pop Culture
+              "pop culture": "Pop Culture", "celebrities": "Pop Culture",
+              "music": "Pop Culture", "movies": "Pop Culture", "film": "Pop Culture",
+              "tv": "Pop Culture", "entertainment": "Pop Culture",
+              # Markets / Econ
+              "markets": "Markets / Econ", "stocks": "Markets / Econ",
+              "economy": "Markets / Econ", "economics": "Markets / Econ",
+              "fed": "Markets / Econ", "fed rates": "Markets / Econ",
+              "inflation": "Markets / Econ", "gdp": "Markets / Econ",
+              "recession": "Markets / Econ",
+              # Weather / Climate
+              "weather": "Weather / Climate", "climate": "Weather / Climate",
+              "hurricane": "Weather / Climate", "heat wave": "Weather / Climate",
+              "wildfire": "Weather / Climate",
+          }
+
           def pick_tag(tags):
+              # Only accept tags that map to one of our broad categories; otherwise
+              # let the AI / text-inference fallbacks decide.
               if not isinstance(tags, list):
                   return None
               for t in tags:
                   label = t if isinstance(t, str) else (t.get("label") or t.get("slug"))
-                  if label and label.lower() not in GENERIC:
-                      return label
+                  if not label or label.lower() in GENERIC:
+                      continue
+                  mapped = TAG_MAPPING.get(label.strip().lower())
+                  if mapped:
+                      return mapped
               return None
 
           with open("markets.json") as f:
@@ -217,22 +292,40 @@ jobs:
               except (TypeError, ValueError):
                   return default
 
-          # Strip generic / time-bucket categories so the heatmap groups
-          # by topic instead of by frequency.
+          # Limitless tags include internal labels ("Lumy" = their AMM bot,
+          # "Simple Mode" = a UI flag, etc.) that aren't useful topic categories.
           GENERIC_CATS = {"hourly", "daily", "weekly", "monthly", "recurring",
-                          "all", "trending", "featured", "new"}
+                          "all", "trending", "featured", "new",
+                          "lumy", "simple mode", "manual", "amm", "clob",
+                          "negrisk", "single", "live", "24h", "automated",
+                          "sports automation", "auto"}
+          # Map specific Limitless tags to broad heatmap categories.
+          LIMITLESS_TAG_MAP = {
+              "crypto": "Crypto", "bitcoin": "Crypto", "btc": "Crypto",
+              "ethereum": "Crypto", "eth": "Crypto", "solana": "Crypto",
+              "doge": "Crypto", "memecoin": "Crypto", "memecoins": "Crypto",
+              "stocks": "Markets / Econ", "stock": "Markets / Econ",
+              "spx": "Markets / Econ", "s&p": "Markets / Econ", "nasdaq": "Markets / Econ",
+              "tesla": "Markets / Econ", "nvidia": "Markets / Econ", "apple": "Markets / Econ",
+              "sports": "Sports", "nfl": "Sports", "nba": "Sports", "mlb": "Sports",
+              "ufc": "Sports", "soccer": "Sports", "tennis": "Sports",
+              "politics": "Politics", "elections": "Politics",
+              "ai": "AI / Tech", "tech": "AI / Tech",
+              "weather": "Weather / Climate", "climate": "Weather / Climate",
+          }
 
           def pick_category(m):
-              for c in (m.get("categories") or []):
-                  if isinstance(c, str) and c.strip() and c.strip().lower() not in GENERIC_CATS:
-                      return c.strip()
-              for t in (m.get("tags") or []):
-                  if isinstance(t, str) and t.strip() and t.strip().lower() not in GENERIC_CATS:
-                      return t.strip()
-              # Last resort: at least surface the time-bucket so it isn't all "Other".
-              cats = m.get("categories") or []
-              if cats and isinstance(cats[0], str): return cats[0]
-              return "Other"
+              # Look in both `categories` and `tags`; return the first one that
+              # maps to a broad heatmap category. Anything else is left None so
+              # the page-side text inference can categorize from the title.
+              for source in (m.get("categories") or [], m.get("tags") or []):
+                  for t in source:
+                      if not isinstance(t, str): continue
+                      norm = t.strip().lower()
+                      if not norm or norm in GENERIC_CATS: continue
+                      if norm in LIMITLESS_TAG_MAP:
+                          return LIMITLESS_TAG_MAP[norm]
+              return None
 
           markets = []
           for m in raw:
