@@ -267,8 +267,30 @@
     border: 2px solid var(--ink);
     box-shadow: 4px 4px 0 var(--ink);
     padding: 10px 12px;
-    max-width: 320px;
+    max-width: 380px;
     font-family: "Space Grotesk", sans-serif; font-size: 12px;
+  }
+  .tooltip .toplist {
+    margin-top: 8px; padding-top: 6px;
+    border-top: 1px dashed var(--ink);
+  }
+  .tooltip .toplist .head {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 4px;
+  }
+  .tooltip .toplist .item {
+    display: flex; justify-content: space-between; gap: 10px;
+    font-size: 11px; color: var(--ink); margin-top: 3px;
+    line-height: 1.3;
+  }
+  .tooltip .toplist .item .q {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: "Space Grotesk", sans-serif;
+  }
+  .tooltip .toplist .item .v {
+    color: var(--muted); font-family: "JetBrains Mono", monospace;
+    flex-shrink: 0; font-size: 10.5px;
   }
   .tooltip .q { font-family: "Fraunces", serif; font-weight: 700; font-size: 14px; margin-bottom: 6px; line-height: 1.25; }
   .tooltip .row { display: flex; justify-content: space-between; gap: 12px; font-family: "JetBrains Mono", monospace; }
@@ -310,7 +332,7 @@
   </div>
   <div class="subbar">
     <span class="dot"></span>
-    <span>Each cell is one of the 50 most-traded prediction markets in the last 24 hours. Cell area = 24h trading volume. Cell color = market liquidity (cream = thin, plum = deep).</span>
+    <span>Where the action is in prediction markets.<sup style="color:var(--tomato)">*</sup></span>
   </div>
 </header>
 
@@ -353,12 +375,11 @@
   </div>
 
   <div class="legend">
-    <span>Liquidity ›</span>
-    <span class="swatch"><span class="chip" style="background:#e9dcc1"></span>thin</span>
-    <span class="swatch"><span class="chip" style="background:#d9a521"></span>moderate</span>
-    <span class="swatch"><span class="chip" style="background:#b85431"></span>deep</span>
-    <span class="swatch"><span class="chip" style="background:#6a3d6e"></span>deepest</span>
-    <span style="margin-left:auto">Settled markets (≥97% / ≤3%) are filtered out · click a cell to open the market ↗</span>
+    <span>Yes price ›</span>
+    <span class="swatch"><span class="chip" style="background:#b85431"></span>0% (No)</span>
+    <span class="swatch"><span class="chip" style="background:#d9a521"></span>50% (toss-up)</span>
+    <span class="swatch"><span class="chip" style="background:#2f5d3a"></span>100% (Yes)</span>
+    <span style="margin-left:auto"><sup style="color:var(--tomato)">*</sup> Excludes settled markets (Yes price ≥97% or ≤3%) · click a cell to open the market ↗</span>
   </div>
 
   <div class="marquee" id="marquee">
@@ -500,6 +521,25 @@
     }
     return null;
   }
+
+  // Last-resort category inference from market text — catches the long tail
+  // (single sports games, niche crypto pairs, etc.) that the API tag join misses.
+  const INFER_PATTERNS = [
+    ["Sports", /\b(MLB|NFL|NBA|NHL|UFC|MMA|UEFA|FIFA|F1|Formula\s?1|NASCAR|premier league|champions league|la liga|bundesliga|serie a|world cup|playoffs?|super bowl|world series|stanley cup|nba finals?|march madness|ncaa|wimbledon|US Open|french open|australian open|grand slam|tennis|soccer|football|baseball|basketball|hockey|boxing|cricket|rugby|golf|PGA|chess|valorant|league of legends|dota|cs:?go|counter[- ]?strike|esports?|mariners|yankees|astros|dodgers|cubs|red sox|cardinals|nationals|brewers|tigers|orioles|guardians|rangers|royals|twins|white sox|braves|mets|phillies|marlins|reds|pirates|rockies|diamondbacks|padres|giants|angels|athletics|blue jays|rays|cowboys|patriots|chiefs|49ers|jets|eagles|packers|ravens|steelers|saints|broncos|colts|bills|seahawks|falcons|panthers|titans|jaguars|texans|browns|bengals|raiders|chargers|rams|cardinals|vikings|bears|lions|dolphins|commanders|warriors|lakers|celtics|nets|knicks|heat|bulls|spurs|76ers|suns|nuggets|thunder|mavericks|clippers|trail ?blazers|jazz|kings|hornets|timberwolves|grizzlies|magic|raptors|hawks|pistons|wizards|pacers|cavaliers|cavs|bucks|rockets|man(?:chester)?\s*united|man(?:chester)?\s*city|liverpool|arsenal|chelsea|tottenham|spurs|barcelona|real madrid|atletico|psg|bayern|juventus|milan|inter|napoli|dortmund|bvb|ajax|porto|benfica|celtic|rangers|gunners|reds|blues)\b/i],
+    ["Crypto", /\b(bitcoin|btc|ethereum|eth|solana|sol|polygon|matic|cardano|ada|xrp|ripple|dogecoin|doge|shiba|shib|crypto|stablecoin|usdt|usdc|defi|nft|halving|web3|altcoin|memecoin|blockchain|dapp|hodl|vitalik|saylor|binance|coinbase)\b/i],
+    ["Politics", /\b(trump|biden|harris|kamala|obama|vance|elect(?:ion|ed)?|presidential|senate|house|congress|gop|democrat|republican|primary|primaries|caucus|nominat|ballot|electoral|impeach|filibuster|inaug|vice[- ]?president|cabinet|fed(?:eral)?\s*reserve|fed chair|supreme court|scotus|prime minister|chancellor|macron|sunak|starmer|brexit|nato|kremlin|putin|zelensky|netanyahu|xi\s*jinping|geopolitic|tariff)\b/i],
+    ["AI / Tech", /\b(GPT|ChatGPT|OpenAI|Anthropic|Claude|Gemini|LLaMA|LLM|artificial intelligence|machine learning|stable diffusion|midjourney|dall-?e|sora|copilot|nvidia|TSMC|semiconductor|tesla|autopilot|FSD|cybertruck|spacex|starship|neuralink|apple|iphone|google|alphabet|microsoft|meta|facebook|amazon|aws)\b/i],
+    ["Pop Culture", /\b(oscar|grammy|emmy|golden globe|academy award|cannes|sundance|box office|netflix|disney|hbo|premiere|sequel|movie|film|album|tour|concert|tv show|series|episode|hot 100|chart-topping|spotify|youtube|tiktok|kardashian|swift|taylor swift|beyonce|drake|kendrick|rihanna|kanye|musk|elon)\b/i],
+    ["Markets / Econ", /\b(S&P|SPY|NASDAQ|dow jones|earnings|GDP|CPI|inflation|recession|interest rate|rate cut|rate hike|jobs report|unemployment|housing market|FOMC|treasury yield)\b/i],
+  ];
+  function inferFromText(text) {
+    if (!text) return null;
+    for (const [name, pat] of INFER_PATTERNS) {
+      if (pat.test(text)) return name;
+    }
+    return null;
+  }
+
   function extractCategory(m) {
     if (m._category) return m._category;
     let cat = pickTag(m.tags);
@@ -511,6 +551,10 @@
       if (ev?.category) return ev.category;
     }
     if (m.category) return m.category;
+    // Final fallback: infer from question + event title text.
+    const text = [m.question, ...(events.map(e => e?.title).filter(Boolean))].join(" ");
+    cat = inferFromText(text);
+    if (cat) return cat;
     return "Other";
   }
 
@@ -538,24 +582,25 @@
   }
 
   // ---- color ----
-  // Liquidity gradient: cream (thin) → mustard → rust → plum (deep).
-  // Uses a log-scaled position because liquidity spans several orders of
-  // magnitude across the top 50 markets.
-  function liquidityColor(t) {
-    if (t < 0.33)      return d3.interpolateRgb("#e9dcc1", "#d9a521")(t / 0.33);
-    else if (t < 0.66) return d3.interpolateRgb("#d9a521", "#b85431")((t - 0.33) / 0.33);
-    else               return d3.interpolateRgb("#b85431", "#6a3d6e")((t - 0.66) / 0.34);
+  // Yes-price gradient: rust (No-leaning) → mustard (toss-up) → forest (Yes-leaning).
+  function priceColor(p) {
+    if (p == null) return "#8b7355";
+    if (p < 0.5) {
+      const t = p / 0.5;
+      return d3.interpolateRgb("#b85431", "#d9a521")(t);
+    } else {
+      const t = (p - 0.5) / 0.5;
+      return d3.interpolateRgb("#d9a521", "#2f5d3a")(t);
+    }
   }
   function colorFor(d) {
     if (state.view === "categories") {
       const hash = [...d.data.name].reduce((a, c) => a + c.charCodeAt(0), 0);
       return CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length];
     }
-    const liq = Number(d.data.liquidity) || 0;
-    if (liq <= 0) return "#e9dcc1";
-    const max = d3.max(state.markets, m => m.liquidity) || 1;
-    const t = Math.min(1, Math.log(liq + 1) / Math.log(max + 1));
-    return liquidityColor(t);
+    const p = d.data.yesPrice;
+    if (p == null || !d.data.isBinary) return "#8b7355";
+    return priceColor(p);
   }
   function textOn(fill) {
     const c = d3.color(fill);
@@ -751,8 +796,23 @@
       html += row("24h volume", fmtUsd(data.volume24hr));
       html += row("Liquidity", fmtUsd(data.liquidity));
       html += row("Markets", data.count);
-      const top = data.markets?.[0];
-      if (top) html += `<div style="margin-top:6px;color:var(--muted);font-size:11px">Top: ${escapeHtml(top.question.slice(0,60))}…</div>`;
+      const tops = (data.markets || []).slice(0, 5);
+      if (tops.length) {
+        const metricKey = state.metric;
+        html += `<div class="toplist"><div class="head">Top ${tops.length} by ${
+          metricKey === "volume24hr" ? "24h volume" : metricKey === "liquidity" ? "liquidity" : "total volume"
+        }</div>`;
+        for (const m of tops) {
+          html += `<div class="item">
+            <span class="q">${escapeHtml(m.question)}</span>
+            <span class="v">${fmtUsd(m[metricKey])}</span>
+          </div>`;
+        }
+        if (data.count > tops.length) {
+          html += `<div style="font-size:10.5px;color:var(--muted);margin-top:4px;font-family:'JetBrains Mono',monospace">+ ${data.count - tops.length} more</div>`;
+        }
+        html += `</div>`;
+      }
     } else {
       html += row("Volume", fmtUsd(data.volume));
       html += row("24h volume", fmtUsd(data.volume24hr));
@@ -821,21 +881,4 @@
       const log = (ATTEMPT_LOG.length ? ATTEMPT_LOG : ["no attempts logged"]).map(escapeHtml).join("<br/>");
       $("#status").innerHTML = `
         <div class="err">Couldn't load data</div>
-        <div style="max-width:520px;text-align:center;color:var(--muted)">
-          ${escapeHtml(err.message)}.<br/>
-          The page reads a static data file refreshed every ~10 minutes by a scheduled job, with the live API as backup.
-        </div>
-        <details style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);max-width:520px;text-align:left;border:1px dashed var(--ink);padding:8px;background:var(--paper-2)">
-          <summary style="cursor:pointer;color:var(--ink)">diagnostics</summary>
-          <div style="margin-top:6px;line-height:1.5">${log}</div>
-        </details>
-        <button class="iconbtn" id="retryBtn" style="margin-top:6px">Retry ↻</button>`;
-      document.getElementById("retryBtn")?.addEventListener("click", () => load());
-    }
-  }
-
-  load();
-})();
-</script>
-</body>
-</html>
+        <div style="max

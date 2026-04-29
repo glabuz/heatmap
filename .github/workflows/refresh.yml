@@ -18,24 +18,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch markets and events from Polymarket Gamma API
+      - name: Fetch markets and events from Gamma API
         run: |
           set -euo pipefail
           BASE="https://gamma-api.polymarket.com"
           Q="active=true&closed=false&archived=false"
           echo "Fetching markets…"
           curl -sSf -H "accept: application/json" "$BASE/markets?$Q&order=volume&ascending=false&limit=300" -o markets.json
-          echo "Fetching events…"
-          curl -sSf -H "accept: application/json" "$BASE/events?$Q&order=volume&ascending=false&limit=500" -o events.json
-          python3 -c "import json; m=json.load(open('markets.json')); e=json.load(open('events.json')); assert isinstance(m,list) and len(m)>0; assert isinstance(e,list); print(f'OK: {len(m)} markets, {len(e)} events')"
+          echo "Fetching events (lifetime volume)…"
+          curl -sSf -H "accept: application/json" "$BASE/events?$Q&order=volume&ascending=false&limit=1000" -o events_volume.json
+          # 24h-volume sort surfaces today's hot events (sports games, etc.)
+          # that the lifetime-volume sort misses. Tolerate failure.
+          echo "Fetching events (24h volume)…"
+          curl -sSf -H "accept: application/json" "$BASE/events?$Q&order=volume24hr&ascending=false&limit=500" -o events_24h.json || echo "[]" > events_24h.json
+          python3 -c "import json; m=json.load(open('markets.json')); ev=json.load(open('events_volume.json')); ev2=json.load(open('events_24h.json')); print(f'OK: {len(m)} markets, {len(ev)+len(ev2)} events')"
 
-      - name: Join markets with event tags and write data.json
+      - name: Build data.json with categories (tags + AI fallback)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           python3 - <<'PY'
-          import json, datetime
+          import json, os, datetime, urllib.request, urllib.error, time
 
           GENERIC = {"all", "trending", "featured", "new", "hot", "popular",
                      "recurring", "live", "24h", "weekly", "monthly", "daily"}
+          ALLOWED_LABELS = ["Politics", "Sports", "Crypto", "AI / Tech",
+                            "Pop Culture", "Markets / Econ", "World / Geopolitics",
+                            "Weather / Climate", "Other"]
 
           def pick_tag(tags):
               if not isinstance(tags, list):
@@ -46,14 +55,17 @@ jobs:
                       return label
               return None
 
+          # ---- 1. Load source data ----
           with open("markets.json") as f:
               markets = json.load(f)
-          with open("events.json") as f:
-              events = json.load(f)
+          with open("events_volume.json") as f:
+              events1 = json.load(f)
+          with open("events_24h.json") as f:
+              events2 = json.load(f)
 
-          # Build market_id -> category map by walking each event's nested markets.
+          # ---- 2. API tag join ----
           cat_by_market = {}
-          for ev in events:
+          for ev in events1 + events2:
               cat = pick_tag(ev.get("tags"))
               if not cat:
                   continue
@@ -63,7 +75,6 @@ jobs:
                       if v:
                           cat_by_market[str(v)] = cat
 
-          # Attach _category to each top-level market.
           for m in markets:
               for key in ("id", "conditionId", "slug"):
                   v = m.get(key)
@@ -71,8 +82,99 @@ jobs:
                       m["_category"] = cat_by_market[str(v)]
                       break
 
-          with_cat = sum(1 for m in markets if m.get("_category"))
-          print(f"Categorized {with_cat}/{len(markets)} markets")
+          tag_joined = sum(1 for m in markets if m.get("_category"))
+          print(f"Tag-joined: {tag_joined}/{len(markets)} markets")
+
+          # ---- 3. AI fallback (Claude Haiku) with persistent cache ----
+          try:
+              with open("categories_cache.json") as f:
+                  cache = json.load(f)
+          except (FileNotFoundError, json.JSONDecodeError):
+              cache = {}
+
+          def market_id(m):
+              return str(m.get("id") or m.get("conditionId") or m.get("slug") or "")
+
+          def claude_categorize(items):
+              """items: [{id, question}]. Returns {id: category}."""
+              api_key = os.environ.get("ANTHROPIC_API_KEY")
+              if not api_key or not items:
+                  return {}
+              labels = ", ".join(ALLOWED_LABELS)
+              prompt_lines = [
+                  f"Classify each prediction-market question into ONE of these categories: {labels}.",
+                  "Reply with ONLY a JSON object mapping id → category. No prose, no code fences.",
+                  "",
+              ]
+              for it in items:
+                  q = (it["question"] or "").replace("\n", " ").strip()[:240]
+                  prompt_lines.append(f'{it["id"]}: {q}')
+              body = json.dumps({
+                  "model": "claude-haiku-4-5",
+                  "max_tokens": 4000,
+                  "messages": [{"role": "user", "content": "\n".join(prompt_lines)}],
+              }).encode()
+              req = urllib.request.Request(
+                  "https://api.anthropic.com/v1/messages",
+                  data=body,
+                  headers={
+                      "x-api-key": api_key,
+                      "anthropic-version": "2023-06-01",
+                      "content-type": "application/json",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as resp:
+                      result = json.loads(resp.read())
+                  text = result["content"][0]["text"]
+                  s, e = text.find("{"), text.rfind("}") + 1
+                  if s >= 0 and e > s:
+                      raw = json.loads(text[s:e])
+                      return {str(k): v for k, v in raw.items() if v in ALLOWED_LABELS}
+              except urllib.error.HTTPError as err:
+                  print(f"Claude HTTP {err.code}: {err.read()[:200]}")
+              except Exception as e:
+                  print(f"Claude failed: {e}")
+              return {}
+
+          # Apply cache, collect anything still uncategorized
+          to_classify = []
+          for m in markets:
+              if m.get("_category"):
+                  continue
+              mid = market_id(m)
+              if not mid:
+                  continue
+              if mid in cache:
+                  m["_category"] = cache[mid]
+                  continue
+              to_classify.append({"id": mid, "question": m.get("question") or m.get("slug") or ""})
+
+          if to_classify and os.environ.get("ANTHROPIC_API_KEY"):
+              print(f"Calling Claude for {len(to_classify)} new markets…")
+              # Chunk to keep prompts modest
+              for i in range(0, len(to_classify), 60):
+                  chunk = to_classify[i:i + 60]
+                  result = claude_categorize(chunk)
+                  for mid, cat in result.items():
+                      cache[mid] = cat
+                  if i + 60 < len(to_classify):
+                      time.sleep(1)
+              # Apply newly cached results
+              for m in markets:
+                  if not m.get("_category"):
+                      mid = market_id(m)
+                      if mid in cache:
+                          m["_category"] = cache[mid]
+              # Persist cache
+              with open("categories_cache.json", "w") as f:
+                  json.dump(cache, f, indent=2, sort_keys=True)
+              print(f"Cache size: {len(cache)} markets")
+          elif to_classify:
+              print(f"Skipping AI (no ANTHROPIC_API_KEY); {len(to_classify)} markets stay uncategorized")
+
+          final_categorized = sum(1 for m in markets if m.get("_category"))
+          print(f"Final: {final_categorized}/{len(markets)} markets categorized")
 
           payload = {
               "fetchedAt": datetime.datetime.utcnow().isoformat() + "Z",
@@ -84,13 +186,13 @@ jobs:
           PY
 
       - name: Cleanup intermediate files
-        run: rm -f markets.json events.json
+        run: rm -f markets.json events_volume.json events_24h.json
 
       - name: Commit if changed
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data.json
+          git add data.json categories_cache.json 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
