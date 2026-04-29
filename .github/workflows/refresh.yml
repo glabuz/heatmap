@@ -18,23 +18,62 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch markets from Polymarket Gamma API
+      - name: Fetch markets and events from Polymarket Gamma API
         run: |
           set -euo pipefail
-          URL="https://gamma-api.polymarket.com/markets?active=true&closed=false&archived=false&order=volume&ascending=false&limit=300"
-          echo "Fetching: $URL"
-          curl -sSf -H "accept: application/json" "$URL" -o data.json
-          # Validate it's a non-empty JSON array.
-          python3 -c "import json,sys; d=json.load(open('data.json')); assert isinstance(d, list) and len(d) > 0, 'Bad payload'; print(f'OK: {len(d)} markets')"
+          BASE="https://gamma-api.polymarket.com"
+          Q="active=true&closed=false&archived=false"
+          echo "Fetching markets…"
+          curl -sSf -H "accept: application/json" "$BASE/markets?$Q&order=volume&ascending=false&limit=300" -o markets.json
+          echo "Fetching events…"
+          curl -sSf -H "accept: application/json" "$BASE/events?$Q&order=volume&ascending=false&limit=500" -o events.json
+          python3 -c "import json; m=json.load(open('markets.json')); e=json.load(open('events.json')); assert isinstance(m,list) and len(m)>0; assert isinstance(e,list); print(f'OK: {len(m)} markets, {len(e)} events')"
 
-      - name: Add fetched-at metadata
+      - name: Join markets with event tags and write data.json
         run: |
-          # Wrap the array with a tiny header so the page can show a
-          # "data fetched at" timestamp without an extra request.
           python3 - <<'PY'
           import json, datetime
-          with open("data.json") as f:
+
+          GENERIC = {"all", "trending", "featured", "new", "hot", "popular",
+                     "recurring", "live", "24h", "weekly", "monthly", "daily"}
+
+          def pick_tag(tags):
+              if not isinstance(tags, list):
+                  return None
+              for t in tags:
+                  label = t if isinstance(t, str) else (t.get("label") or t.get("slug"))
+                  if label and label.lower() not in GENERIC:
+                      return label
+              return None
+
+          with open("markets.json") as f:
               markets = json.load(f)
+          with open("events.json") as f:
+              events = json.load(f)
+
+          # Build market_id -> category map by walking each event's nested markets.
+          cat_by_market = {}
+          for ev in events:
+              cat = pick_tag(ev.get("tags"))
+              if not cat:
+                  continue
+              for m in (ev.get("markets") or []):
+                  for key in ("id", "conditionId", "slug"):
+                      v = m.get(key)
+                      if v:
+                          cat_by_market[str(v)] = cat
+
+          # Attach _category to each top-level market.
+          for m in markets:
+              for key in ("id", "conditionId", "slug"):
+                  v = m.get(key)
+                  if v and str(v) in cat_by_market:
+                      m["_category"] = cat_by_market[str(v)]
+                      break
+
+          with_cat = sum(1 for m in markets if m.get("_category"))
+          print(f"Categorized {with_cat}/{len(markets)} markets")
+
           payload = {
               "fetchedAt": datetime.datetime.utcnow().isoformat() + "Z",
               "count": len(markets),
@@ -43,6 +82,9 @@ jobs:
           with open("data.json", "w") as f:
               json.dump(payload, f, separators=(",", ":"))
           PY
+
+      - name: Cleanup intermediate files
+        run: rm -f markets.json events.json
 
       - name: Commit if changed
         run: |

@@ -3,21 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>heatmap zine // prediction markets</title>
+<title>heat &amp; liquid — prediction market activity</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <style>
   :root {
-    --paper:    #f1e8d4;     /* warm cream */
-    --paper-2:  #e9dcc1;     /* darker cream */
-    --ink:      #1a1410;     /* near-black */
+    --paper:    #f1e8d4;
+    --paper-2:  #e9dcc1;
+    --ink:      #1a1410;
     --ink-soft: #3a2f25;
     --muted:    #6b5a48;
     --rule:     #1a1410;
 
-    --tomato:   #e0492e;     /* warm red */
+    --tomato:   #e0492e;
     --rust:     #b85431;
     --mustard:  #d9a521;
     --sage:     #6b8e5a;
@@ -47,7 +47,6 @@
     opacity: 0.35;
     mix-blend-mode: multiply;
   }
-  /* paper edge vignette */
   body::after {
     content: "";
     position: fixed; inset: 0; pointer-events: none; z-index: 99;
@@ -57,7 +56,6 @@
   a { color: var(--tomato); text-decoration: none; border-bottom: 1px dashed currentColor; }
   a:hover { color: var(--ink); }
 
-  /* ===== Header / masthead ===== */
   header {
     padding: 22px 28px 14px;
     border-bottom: 2px solid var(--rule);
@@ -108,7 +106,6 @@
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tomato); display: inline-block; box-shadow: 0 0 0 4px rgba(224,73,46,0.18); animation: pulse 1.6s ease-in-out infinite; }
   @keyframes pulse { 50% { box-shadow: 0 0 0 8px rgba(224,73,46,0); } }
 
-  /* ===== Sticker / live tag ===== */
   .sticker {
     position: absolute;
     right: 28px; top: -10px;
@@ -121,9 +118,7 @@
     box-shadow: 3px 3px 0 var(--ink);
     z-index: 4;
   }
-  .sticker small { display: block; font-family: "JetBrains Mono", monospace; font-style: normal; font-size: 9px; letter-spacing: 0.18em; }
 
-  /* ===== Controls ===== */
   .controls {
     display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
     padding: 14px 28px;
@@ -160,10 +155,8 @@
   .iconbtn:hover { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
   .iconbtn:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); }
 
-  /* ===== Main / treemap ===== */
   main { padding: 14px 28px 22px; }
 
-  /* Stat cards */
   .stats-row {
     display: grid; grid-template-columns: repeat(4, 1fr);
     gap: 12px; margin-bottom: 14px;
@@ -196,7 +189,6 @@
     font-size: 10px; color: var(--muted); margin-left: 5px;
   }
 
-  /* Section heading */
   .section-head {
     display: flex; align-items: baseline; gap: 10px;
     margin: 4px 0 8px; padding-bottom: 4px;
@@ -211,7 +203,6 @@
     margin-left: auto;
   }
 
-  /* Treemap shell */
   .heatmap-wrap {
     background: var(--cream-hi);
     border: 2px solid var(--ink);
@@ -231,7 +222,6 @@
   .corners::before { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
   .corners::after  { bottom: -2px; right: -2px; border-left: 0; border-top: 0; }
 
-  /* Legend */
   .legend {
     display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
     padding: 10px 4px 4px; color: var(--muted);
@@ -240,7 +230,6 @@
   .swatch { display: inline-flex; align-items: center; gap: 6px; }
   .chip { width: 14px; height: 14px; border: 1px solid var(--ink); display: inline-block; }
 
-  /* Marquee */
   .marquee {
     border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink);
     background: var(--ink); color: var(--cream-hi);
@@ -257,16 +246,13 @@
   .marquee .dn { color: #ff8a74; }
   @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
 
-  /* Footer */
   .colophon {
     margin-top: 24px; padding: 18px 0 6px;
     border-top: 2px solid var(--ink);
     display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline;
     font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted);
   }
-  .colophon .x { font-family: "Fraunces", serif; font-style: italic; font-size: 14px; color: var(--ink); }
 
-  /* ===== Treemap cells ===== */
   .cell { cursor: pointer; }
   .cell rect.bg { stroke: var(--ink); stroke-width: 1.25; transition: filter 0.15s ease; }
   .cell:hover rect.bg { filter: brightness(1.06) saturate(1.1); stroke-width: 2; }
@@ -274,7 +260,6 @@
   .cell text.title { font-family: "Fraunces", serif; font-weight: 700; }
   .cell text.sub   { font-family: "JetBrains Mono", monospace; font-weight: 500; }
 
-  /* ===== Tooltip ===== */
   .tooltip {
     position: fixed; pointer-events: none; z-index: 200;
     background: var(--cream-hi);
@@ -295,7 +280,6 @@
     margin-top: 6px; transform: rotate(-2deg);
   }
 
-  /* ===== Loading ===== */
   .status {
     position: absolute; inset: 6px; display: flex;
     align-items: center; justify-content: center;
@@ -316,19 +300,17 @@
 <body>
 
 <header>
-  <div class="sticker">LIVE!<small>vol.01</small></div>
+  <div class="sticker">LIVE</div>
   <div class="masthead">
     <h1 class="brand"><em>heat</em> <span class="amp">&amp;</span> liquid</h1>
-    <span class="kicker">a prediction-market zine</span>
+    <span class="kicker">prediction market activity</span>
     <div class="issue">
-      ISSUE №<b id="issueNum">001</b><br/>
-      <span id="lastUpdated">— · · —</span>
+      <span id="lastUpdated">—</span>
     </div>
   </div>
   <div class="subbar">
     <span class="dot"></span>
-    <span>fetching the floor of the prediction-market multiverse</span>
-    <span style="margin-left:auto;color:var(--muted)">scroll, hover, click. cells link out.</span>
+    <span>Each cell is one of the 50 most-traded prediction markets in the last 24 hours. Cell area = 24h trading volume. Cell color = market liquidity (cream = thin, plum = deep).</span>
   </div>
 </header>
 
@@ -344,12 +326,6 @@
     <button data-metric="volume">total volume</button>
     <button data-metric="liquidity">liquidity</button>
   </div>
-  <span class="label" style="margin-left:8px;">color</span>
-  <div class="seg" id="colorTabs">
-    <button data-color="price" class="active">yes price</button>
-    <button data-color="liquidity">liquidity</button>
-    <button data-color="palette">zine</button>
-  </div>
   <button class="iconbtn" id="refreshBtn" style="margin-left:auto;">↻ refresh</button>
 </div>
 
@@ -363,7 +339,7 @@
   </div>
 
   <div class="section-head">
-    <h2 id="sectionTitle">the heatmap, by total volume</h2>
+    <h2 id="sectionTitle">Top 50 markets · sized by 24h volume</h2>
     <span class="meta" id="sectionMeta"></span>
   </div>
 
@@ -372,27 +348,26 @@
     <svg id="heatmap" viewBox="0 0 1200 640" preserveAspectRatio="none"></svg>
     <div class="status" id="status">
       <div class="spinner"></div>
-      <div>printing the latest issue…</div>
+      <div>Loading data…</div>
     </div>
   </div>
 
   <div class="legend">
-    <span>price scale ›</span>
-    <span class="swatch"><span class="chip" style="background:#b85431"></span>0% no</span>
-    <span class="swatch"><span class="chip" style="background:#d9a521"></span>50%</span>
-    <span class="swatch"><span class="chip" style="background:#2f5d3a"></span>100% yes</span>
-    <span style="margin-left:auto">cell area = chosen metric · click a cell to open the market ↗</span>
+    <span>Liquidity ›</span>
+    <span class="swatch"><span class="chip" style="background:#e9dcc1"></span>thin</span>
+    <span class="swatch"><span class="chip" style="background:#d9a521"></span>moderate</span>
+    <span class="swatch"><span class="chip" style="background:#b85431"></span>deep</span>
+    <span class="swatch"><span class="chip" style="background:#6a3d6e"></span>deepest</span>
+    <span style="margin-left:auto">Settled markets (≥97% / ≤3%) are filtered out · click a cell to open the market ↗</span>
   </div>
 
   <div class="marquee" id="marquee">
-    <div class="marquee-track" id="marqueeTrack">loading the wire…</div>
+    <div class="marquee-track" id="marqueeTrack">Loading…</div>
   </div>
 
   <div class="colophon">
-    <span class="x">colophon —</span>
-    <span>set in <b>fraunces</b>, <b>space grotesk</b> &amp; <b>jetbrains mono</b>.</span>
-    <span>data: <a href="https://gamma-api.polymarket.com" target="_blank" rel="noopener">the Gamma API</a></span>
-    <span style="margin-left:auto">© pirate radio for the prediction-market crowd · not financial advice</span>
+    <span>Data via <a href="https://gamma-api.polymarket.com" target="_blank" rel="noopener">the Gamma API</a></span>
+    <span style="margin-left:auto">Not financial advice</span>
   </div>
 
 </main>
@@ -403,18 +378,23 @@
 (() => {
   const GAMMA = "https://gamma-api.polymarket.com";
 
-  // Indie palette for "zine" color mode + multi-outcome fallbacks
-  const ZINE_PALETTE = [
+  // Categorical palette for "by category" view + multi-outcome fallbacks.
+  const CATEGORY_PALETTE = [
     "#e0492e", "#d9a521", "#6b8e5a", "#2d6a8e", "#6a3d6e",
     "#b85431", "#2f5d3a", "#a87d2c", "#8b4a2f", "#3a6e7a",
     "#c4671f", "#7a8b3a", "#5b3a6e", "#9b3838", "#4a7a5b"
   ];
 
+  // Anything with a Yes price at or beyond these bounds is treated as
+  // already-resolved and hidden — even if it still shows 24h volume from
+  // settlement-day trading.
+  const SETTLED_HI = 0.97;
+  const SETTLED_LO = 0.03;
+
   const state = {
     markets: [],
     view: "markets",
     metric: "volume24hr",
-    color: "price",
     loading: true,
     error: null,
   };
@@ -432,10 +412,7 @@
   };
   const fmtPct = (p) => (p == null || isNaN(p)) ? "—" : (p * 100).toFixed(1) + "%";
 
-  // ----- Fetch -----
-  // Try the Gamma API directly. If the browser blocks it (CORS, network,
-  // edge filtering), retry via a public CORS proxy. Each attempt is logged
-  // so the error UI can show what actually went wrong.
+  // ---- fetch ----
   const ATTEMPT_LOG = [];
 
   async function fetchJson(url, label) {
@@ -461,9 +438,6 @@
 
   async function fetchTopMarkets() {
     ATTEMPT_LOG.length = 0;
-    // Primary source: same-origin data.json baked by the GitHub Action every
-    // ~10 minutes. Falls back to the live API + public proxies if data.json
-    // isn't there yet (e.g. before the first scheduled run).
     const localUrl = `./data.json?t=${Math.floor(Date.now() / 60000)}`;
     const path     = `/markets?active=true&closed=false&archived=false&order=volume&ascending=false&limit=300`;
     const direct   = `${GAMMA}${path}`;
@@ -488,25 +462,36 @@
     }
 
     if (!Array.isArray(raw)) throw new Error("Unexpected response shape");
-    if (raw[0]) {
-      // Debug aid: log keys + first event's tags so we can see what the API
-      // is actually giving us if categories ever look wrong.
-      console.log("[heatmap] sample market keys:", Object.keys(raw[0]));
-      console.log("[heatmap] sample events:", raw[0].events);
-    }
-    const all = raw.map(normalizeMarket).filter(m => m && m.volume24hr > 0);
+
+    const all = raw
+      .map(normalizeMarket)
+      .filter(m => m && m.volume24hr > 0 && !isSettled(m));
+
     all.sort((a, b) => b.volume24hr - a.volume24hr);
     return all.slice(0, 50);
   }
+
+  // A market is treated as settled when its leading outcome is essentially
+  // certain. For binary markets that's Yes ≥ 97% or ≤ 3%; for multi-outcome
+  // markets it's any single outcome above the high bound.
+  function isSettled(m) {
+    if (m.isBinary) {
+      if (m.yesPrice == null) return false;
+      return m.yesPrice >= SETTLED_HI || m.yesPrice <= SETTLED_LO;
+    }
+    if (Array.isArray(m.prices) && m.prices.length) {
+      return m.prices.some(p => Number.isFinite(p) && p >= SETTLED_HI);
+    }
+    return false;
+  }
+
   function safeJson(s) {
     if (!s) return null;
     if (typeof s !== "string") return s;
     try { return JSON.parse(s); } catch { return null; }
   }
-  // Skip generic / cross-cutting tags so the heatmap categories are real
-  // topics (Politics, Crypto, Sports, …) rather than buckets like "All".
-  const GENERIC_TAG = /^(all|trending|featured|new|hot|popular|recurring|live|24h)$/i;
 
+  const GENERIC_TAG = /^(all|trending|featured|new|hot|popular|recurring|live|24h|weekly|monthly|daily)$/i;
   function pickTag(tags) {
     if (!Array.isArray(tags)) return null;
     for (const t of tags) {
@@ -515,19 +500,16 @@
     }
     return null;
   }
-
   function extractCategory(m) {
-    // 1) Tags directly on the market (rare but happens)
+    if (m._category) return m._category;
     let cat = pickTag(m.tags);
     if (cat) return cat;
-    // 2) Tags on the parent event (most common)
     const events = Array.isArray(m.events) ? m.events : [];
     for (const ev of events) {
       cat = pickTag(ev?.tags);
       if (cat) return cat;
       if (ev?.category) return ev.category;
     }
-    // 3) Direct category field
     if (m.category) return m.category;
     return "Other";
   }
@@ -555,40 +537,26 @@
     };
   }
 
-  // ----- Color logic -----
-  function priceColor(p) {
-    if (p == null) return "#8b7355";
-    // Indie palette: rust → mustard → forest
-    if (p < 0.5) {
-      const t = p / 0.5;
-      return d3.interpolateRgb("#b85431", "#d9a521")(t);
-    } else {
-      const t = (p - 0.5) / 0.5;
-      return d3.interpolateRgb("#d9a521", "#2f5d3a")(t);
-    }
+  // ---- color ----
+  // Liquidity gradient: cream (thin) → mustard → rust → plum (deep).
+  // Uses a log-scaled position because liquidity spans several orders of
+  // magnitude across the top 50 markets.
+  function liquidityColor(t) {
+    if (t < 0.33)      return d3.interpolateRgb("#e9dcc1", "#d9a521")(t / 0.33);
+    else if (t < 0.66) return d3.interpolateRgb("#d9a521", "#b85431")((t - 0.33) / 0.33);
+    else               return d3.interpolateRgb("#b85431", "#6a3d6e")((t - 0.66) / 0.34);
   }
   function colorFor(d) {
     if (state.view === "categories") {
       const hash = [...d.data.name].reduce((a, c) => a + c.charCodeAt(0), 0);
-      return ZINE_PALETTE[hash % ZINE_PALETTE.length];
+      return CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length];
     }
-    if (state.color === "palette") {
-      const hash = [...d.data.name].reduce((a, c) => a + c.charCodeAt(0), 0);
-      return ZINE_PALETTE[hash % ZINE_PALETTE.length];
-    }
-    if (state.color === "liquidity") {
-      const liq = d.data.liquidity || 0;
-      const max = d3.max(state.markets, m => m.liquidity) || 1;
-      const t = Math.min(1, liq / max);
-      // Interpolate cream → ocean → ink
-      return d3.interpolateRgb("#e9dcc1", "#2d6a8e")(t);
-    }
-    const p = d.data.yesPrice;
-    if (p == null || !d.data.isBinary) return "#8b7355";
-    return priceColor(p);
+    const liq = Number(d.data.liquidity) || 0;
+    if (liq <= 0) return "#e9dcc1";
+    const max = d3.max(state.markets, m => m.liquidity) || 1;
+    const t = Math.min(1, Math.log(liq + 1) / Math.log(max + 1));
+    return liquidityColor(t);
   }
-
-  // Choose readable text color (black or cream) given fill
   function textOn(fill) {
     const c = d3.color(fill);
     if (!c) return "#1a1410";
@@ -596,7 +564,7 @@
     return lum > 150 ? "#1a1410" : "#fff7e6";
   }
 
-  // ----- Hierarchy -----
+  // ---- hierarchy ----
   function buildHierarchy() {
     const metric = state.metric;
     if (state.view === "markets") {
@@ -626,7 +594,7 @@
     return { name: "root", children };
   }
 
-  // ----- Render -----
+  // ---- render ----
   function render() {
     if (state.loading || state.error) return;
 
@@ -639,16 +607,13 @@
     $("#statLiq").innerHTML = fmtUsd(totLiq) + ' <small>USDC</small>';
     $("#statN").textContent = cats;
 
-    // section head
     const metricLabel = { volume: "total volume", volume24hr: "24h volume", liquidity: "liquidity" }[state.metric];
-    const viewLabel = state.view === "markets" ? "the heatmap" : "by category";
-    $("#sectionTitle").textContent = `${viewLabel}, by ${metricLabel}`;
+    const viewLabel   = state.view === "markets" ? "Top 50 markets" : "By category";
+    $("#sectionTitle").textContent = `${viewLabel} · sized by ${metricLabel}`;
     $("#sectionMeta").textContent  = state.view === "markets"
-      ? `showing ${state.markets.length} of the largest active markets`
+      ? `showing ${state.markets.length} of the most active markets`
       : `${cats} categories aggregated from ${state.markets.length} markets`;
 
-    // Measure the actual container so the treemap fills it cleanly without
-    // distortion or letterboxing on any screen size.
     const wrap = document.querySelector(".heatmap-wrap");
     const W = Math.max(320, Math.floor(wrap.clientWidth  - 12));
     const H = Math.max(280, Math.floor(wrap.clientHeight - 12));
@@ -678,7 +643,6 @@
       .attr("height", d => Math.max(1, d.y1 - d.y0))
       .attr("fill", d => colorFor(d));
 
-    // Decorative inner stroke for larger cells
     cells.filter(d => (d.x1 - d.x0) > 70 && (d.y1 - d.y0) > 50)
       .append("rect")
       .attr("x", 4).attr("y", 4)
@@ -730,7 +694,7 @@
           sub.text(`${fmtUsd(d.data[state.metric])} · ${d.data.count} mkts`);
         } else {
           const priceTxt = d.data.isBinary && d.data.yesPrice != null
-            ? ` · yes ${fmtPct(d.data.yesPrice)}` : "";
+            ? ` · Yes ${fmtPct(d.data.yesPrice)}` : "";
           sub.text(`${fmtUsd(d.data[state.metric])}${priceTxt}`);
         }
       }
@@ -746,7 +710,7 @@
       });
 
     renderMarquee();
-    $("#lastUpdated").textContent = "off the press · " + new Date().toLocaleTimeString();
+    $("#lastUpdated").textContent = "Updated " + new Date().toLocaleTimeString();
   }
 
   function wrapText(text, width, fontSize) {
@@ -774,9 +738,8 @@
       const cls = m.yesPrice == null ? "" : (m.yesPrice >= 0.5 ? "up" : "dn");
       return `<span><b>★</b> ${escapeHtml(m.question.slice(0, 70))} <span class="${cls}">${p}</span> · 24h ${fmtUsd(m.volume24hr)}</span>`;
     });
-    // Repeat for seamless loop
     const html = items.concat(items).join("");
-    $("#marqueeTrack").innerHTML = html || "no live markets · check back soon";
+    $("#marqueeTrack").innerHTML = html || "No active markets";
   }
 
   function showTooltip(e, d) {
@@ -784,28 +747,28 @@
     const data = d.data;
     let html = `<div class="q">${escapeHtml(data.name)}</div>`;
     if (isCat) {
-      html += row("total volume", fmtUsd(data.volume));
+      html += row("Total volume", fmtUsd(data.volume));
       html += row("24h volume", fmtUsd(data.volume24hr));
-      html += row("liquidity", fmtUsd(data.liquidity));
-      html += row("markets", data.count);
+      html += row("Liquidity", fmtUsd(data.liquidity));
+      html += row("Markets", data.count);
       const top = data.markets?.[0];
-      if (top) html += `<div style="margin-top:6px;color:var(--muted);font-size:11px">top: ${escapeHtml(top.question.slice(0,60))}…</div>`;
+      if (top) html += `<div style="margin-top:6px;color:var(--muted);font-size:11px">Top: ${escapeHtml(top.question.slice(0,60))}…</div>`;
     } else {
-      html += row("volume", fmtUsd(data.volume));
+      html += row("Volume", fmtUsd(data.volume));
       html += row("24h volume", fmtUsd(data.volume24hr));
-      html += row("liquidity", fmtUsd(data.liquidity));
+      html += row("Liquidity", fmtUsd(data.liquidity));
       if (data.isBinary && data.yesPrice != null) {
-        html += row("yes price", fmtPct(data.yesPrice));
-        html += row("no price",  fmtPct(1 - data.yesPrice));
+        html += row("Yes price", fmtPct(data.yesPrice));
+        html += row("No price",  fmtPct(1 - data.yesPrice));
       } else if (data.outcomes?.length) {
         const top = data.outcomes
           .map((o, i) => ({ o, p: data.prices?.[i] ?? null }))
           .filter(x => x.p != null)
           .sort((a,b) => b.p - a.p)[0];
-        if (top) html += row("leading", `${escapeHtml(top.o)} ${fmtPct(top.p)}`);
+        if (top) html += row("Leading", `${escapeHtml(top.o)} ${fmtPct(top.p)}`);
       }
       if (data.category) html += `<div class="badge">${escapeHtml(data.category)}</div>`;
-      html += `<div style="margin-top:6px;color:var(--muted);font-size:11px">click to open the market ↗</div>`;
+      html += `<div style="margin-top:6px;color:var(--muted);font-size:11px">Click to open the market ↗</div>`;
     }
     tooltip.innerHTML = html;
     tooltip.style.display = "block";
@@ -821,7 +784,7 @@
   function row(k, v) { return `<div class="row"><span class="k">${k}</span><span>${v}</span></div>`; }
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
-  // ----- Wiring -----
+  // ---- wiring ----
   function bindTabs(containerSel, key) {
     document.querySelectorAll(containerSel + " button").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -834,30 +797,19 @@
   }
   bindTabs("#viewTabs", "view");
   bindTabs("#metricTabs", "metric");
-  bindTabs("#colorTabs", "color");
 
-  $("#refreshBtn").addEventListener("click", () => load(true));
+  $("#refreshBtn").addEventListener("click", () => load());
 
-  // Reflow the treemap when the window is resized (debounced).
   let resizeTimer;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => { if (!state.loading && !state.error) render(); }, 150);
   });
 
-  // Issue number based on day-of-year — gives a nice "vol 045" feel
-  (function setIssue() {
-    const d = new Date();
-    const start = new Date(d.getFullYear(), 0, 0);
-    const diff = d - start;
-    const day = Math.floor(diff / 86400000);
-    $("#issueNum").textContent = String(day).padStart(3, "0");
-  })();
-
   async function load() {
     state.loading = true; state.error = null;
     $("#status").style.display = "flex";
-    $("#status").innerHTML = `<div class="spinner"></div><div>printing the latest issue…</div>`;
+    $("#status").innerHTML = `<div class="spinner"></div><div>Loading data…</div>`;
     try {
       state.markets = await fetchTopMarkets();
       state.loading = false;
@@ -868,20 +820,20 @@
       state.error = err;
       const log = (ATTEMPT_LOG.length ? ATTEMPT_LOG : ["no attempts logged"]).map(escapeHtml).join("<br/>");
       $("#status").innerHTML = `
-        <div class="err">!! the press jammed</div>
+        <div class="err">Couldn't load data</div>
         <div style="max-width:520px;text-align:center;color:var(--muted)">
           ${escapeHtml(err.message)}.<br/>
-          this page calls the Gamma API directly from your browser, with a CORS proxy as backup.
+          The page reads a static data file refreshed every ~10 minutes by a scheduled job, with the live API as backup.
         </div>
         <details style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);max-width:520px;text-align:left;border:1px dashed var(--ink);padding:8px;background:var(--paper-2)">
           <summary style="cursor:pointer;color:var(--ink)">diagnostics</summary>
           <div style="margin-top:6px;line-height:1.5">${log}</div>
-          <div style="margin-top:8px;color:var(--muted)">most common causes: ad-blocker rule on <code>polymarket.com</code>, browser CORS policy, or regional edge filtering. open DevTools → Network for the full story.</div>
         </details>
-        <button class="iconbtn" id="retryBtn" style="margin-top:6px">try again ↻</button>`;
+        <button class="iconbtn" id="retryBtn" style="margin-top:6px">Retry ↻</button>`;
       document.getElementById("retryBtn")?.addEventListener("click", () => load());
     }
   }
+
   load();
 })();
 </script>
