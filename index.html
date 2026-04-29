@@ -461,21 +461,29 @@
 
   async function fetchTopMarkets() {
     ATTEMPT_LOG.length = 0;
-    // Pull a bigger pool by total volume, then re-rank locally by 24h volume
-    // so the heatmap reflects "what's actually trading today".
-    const path = `/markets?active=true&closed=false&archived=false&order=volume&ascending=false&limit=300`;
-    const direct  = `${GAMMA}${path}`;
-    const proxy1  = `https://corsproxy.io/?` + encodeURIComponent(direct);
-    const proxy2  = `https://api.allorigins.win/raw?url=` + encodeURIComponent(direct);
+    // Primary source: same-origin data.json baked by the GitHub Action every
+    // ~10 minutes. Falls back to the live API + public proxies if data.json
+    // isn't there yet (e.g. before the first scheduled run).
+    const localUrl = `./data.json?t=${Math.floor(Date.now() / 60000)}`;
+    const path     = `/markets?active=true&closed=false&archived=false&order=volume&ascending=false&limit=300`;
+    const direct   = `${GAMMA}${path}`;
+    const proxy1   = `https://corsproxy.io/?` + encodeURIComponent(direct);
+    const proxy2   = `https://api.allorigins.win/raw?url=` + encodeURIComponent(direct);
 
     let raw;
     try {
-      raw = await fetchJson(direct, "direct");
+      const local = await fetchJson(localUrl, "data.json");
+      raw = Array.isArray(local) ? local : (local.markets || []);
+      if (local.fetchedAt) ATTEMPT_LOG.push(`data.json fetchedAt: ${local.fetchedAt}`);
     } catch (_) {
       try {
-        raw = await fetchJson(proxy1, "corsproxy.io");
+        raw = await fetchJson(direct, "direct");
       } catch (__) {
-        raw = await fetchJson(proxy2, "allorigins.win");
+        try {
+          raw = await fetchJson(proxy1, "corsproxy.io");
+        } catch (___) {
+          raw = await fetchJson(proxy2, "allorigins.win");
+        }
       }
     }
 
