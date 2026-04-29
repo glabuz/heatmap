@@ -488,6 +488,12 @@
     }
 
     if (!Array.isArray(raw)) throw new Error("Unexpected response shape");
+    if (raw[0]) {
+      // Debug aid: log keys + first event's tags so we can see what the API
+      // is actually giving us if categories ever look wrong.
+      console.log("[heatmap] sample market keys:", Object.keys(raw[0]));
+      console.log("[heatmap] sample events:", raw[0].events);
+    }
     const all = raw.map(normalizeMarket).filter(m => m && m.volume24hr > 0);
     all.sort((a, b) => b.volume24hr - a.volume24hr);
     return all.slice(0, 50);
@@ -497,6 +503,35 @@
     if (typeof s !== "string") return s;
     try { return JSON.parse(s); } catch { return null; }
   }
+  // Skip generic / cross-cutting tags so the heatmap categories are real
+  // topics (Politics, Crypto, Sports, …) rather than buckets like "All".
+  const GENERIC_TAG = /^(all|trending|featured|new|hot|popular|recurring|live|24h)$/i;
+
+  function pickTag(tags) {
+    if (!Array.isArray(tags)) return null;
+    for (const t of tags) {
+      const label = typeof t === "string" ? t : (t?.label || t?.slug);
+      if (label && !GENERIC_TAG.test(label)) return label;
+    }
+    return null;
+  }
+
+  function extractCategory(m) {
+    // 1) Tags directly on the market (rare but happens)
+    let cat = pickTag(m.tags);
+    if (cat) return cat;
+    // 2) Tags on the parent event (most common)
+    const events = Array.isArray(m.events) ? m.events : [];
+    for (const ev of events) {
+      cat = pickTag(ev?.tags);
+      if (cat) return cat;
+      if (ev?.category) return ev.category;
+    }
+    // 3) Direct category field
+    if (m.category) return m.category;
+    return "Other";
+  }
+
   function normalizeMarket(m) {
     if (!m) return null;
     const outcomes = safeJson(m.outcomes) || ["Yes", "No"];
@@ -506,10 +541,6 @@
     const volume = Number(m.volumeNum ?? m.volume ?? 0);
     const liquidity = Number(m.liquidityNum ?? m.liquidity ?? 0);
     const volume24hr = Number(m.volume24hr ?? m.volume24Hr ?? 0);
-    const tags = m.tags || [];
-    const tag = Array.isArray(tags) && tags.length
-      ? (typeof tags[0] === "string" ? tags[0] : (tags[0].label || tags[0].slug))
-      : (m.category || "Other");
     return {
       id: m.id || m.conditionId || m.slug,
       question: m.question || m.slug || "Untitled market",
@@ -520,7 +551,7 @@
       outcomes, prices,
       isBinary: outcomes.length === 2,
       endDate: m.endDate,
-      category: tag || "Other",
+      category: extractCategory(m),
     };
   }
 
