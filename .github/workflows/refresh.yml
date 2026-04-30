@@ -314,39 +314,10 @@ jobs:
               "weather": "Weather / Climate", "climate": "Weather / Climate",
           }
 
-          # Ticker → category for "$BTC above $X" / "$TSLA above $X" / etc.
-          import re as _re
-          CRYPTO_TICKERS = {
-              "BTC","ETH","SOL","XRP","ADA","DOGE","SHIB","AVAX","LINK","UNI",
-              "MATIC","NEAR","ATOM","DOT","SUI","ARB","OP","INJ","FTM","TRX",
-              "BNB","LTC","BCH","FIL","AAVE","MKR","COMP","SNX","CRV","BAT",
-              "GRT","SAND","MANA","AXS","ENJ","GALA","CHZ","IMX","RNDR","FET",
-              "TAO","WLD","BONK","WIF","PEPE","FLOKI","HBAR","ICP","VET","ALGO",
-              "APT","TON","TIA","SEI","JUP","JTO","PYTH","RAY","ORCA","ENS",
-              "LDO","RPL","STRK","BLUR",
-          }
-          STOCK_TICKERS = {
-              "TSLA","AAPL","MSFT","GOOGL","GOOG","AMZN","META","NVDA","AMD",
-              "INTC","NFLX","DIS","JPM","BAC","GS","WMT","LLY","BRK","COIN",
-              "HOOD","PLTR","MSTR","SMCI","AVGO","SPX","SPY","QQQ","NDX","VIX",
-              "DJI","DJIA","IWM","RUT",
-          }
-          COMMODITY_TICKERS = {
-              "GOLD","XAU","SILVER","XAG","OIL","CRUDE","BRENT","WTI","NATGAS",
-              "COPPER","PLATINUM","PALLADIUM","WHEAT","CORN","SOYBEAN","COFFEE",
-              "COCOA","SUGAR","DXY","EURUSD","USDJPY","GBPUSD","USDCNY",
-          }
-          TICKER_RE = _re.compile(r"\$([A-Z]{2,6})\b")
-
-          def infer_from_ticker(title):
-              if not title: return None
-              for t in TICKER_RE.findall(title):
-                  if t in CRYPTO_TICKERS: return "Crypto"
-                  if t in STOCK_TICKERS or t in COMMODITY_TICKERS: return "Markets / Econ"
-              return None
-
           def pick_category(m):
-              # 1) Explicit tag mapping
+              # Look in both `categories` and `tags`; return the first one that
+              # maps to a broad heatmap category. Anything else is left None so
+              # the page-side text inference can categorize from the title.
               for source in (m.get("categories") or [], m.get("tags") or []):
                   for t in source:
                       if not isinstance(t, str): continue
@@ -354,8 +325,7 @@ jobs:
                       if not norm or norm in GENERIC_CATS: continue
                       if norm in LIMITLESS_TAG_MAP:
                           return LIMITLESS_TAG_MAP[norm]
-              # 2) Ticker inference from the title (covers most Limitless markets)
-              return infer_from_ticker(m.get("title") or "")
+              return None
 
           markets = []
           for m in raw:
@@ -430,4 +400,16 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Stage each file independently so a missing one doesn't abort the rest.
-          for f in data.json d
+          for f in data.json data-limitless.json categories_cache.json; do
+            if [ -f "$f" ]; then
+              git add "$f" && echo "staged $f"
+            else
+              echo "skip $f (not present)"
+            fi
+          done
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "data: refresh [skip ci]"
+            git push
+          fi

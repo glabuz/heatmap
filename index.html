@@ -595,59 +595,6 @@
     return null;
   }
 
-  // Ticker-symbol inference. Limitless markets are almost all "$BTC above $X",
-  // "$TSLA above $X", "$GOLD above $X" — match the dollar-prefixed ticker
-  // and route it to the right bucket.
-  const TICKER_TYPE = {
-    // Crypto
-    BTC: "Crypto", ETH: "Crypto", SOL: "Crypto", XRP: "Crypto", ADA: "Crypto",
-    DOGE: "Crypto", SHIB: "Crypto", AVAX: "Crypto", LINK: "Crypto", UNI: "Crypto",
-    MATIC: "Crypto", NEAR: "Crypto", ATOM: "Crypto", DOT: "Crypto", SUI: "Crypto",
-    ARB: "Crypto", OP: "Crypto", INJ: "Crypto", FTM: "Crypto", TRX: "Crypto",
-    BNB: "Crypto", LTC: "Crypto", BCH: "Crypto", FIL: "Crypto", AAVE: "Crypto",
-    MKR: "Crypto", COMP: "Crypto", SNX: "Crypto", CRV: "Crypto", BAT: "Crypto",
-    GRT: "Crypto", SAND: "Crypto", MANA: "Crypto", AXS: "Crypto", ENJ: "Crypto",
-    GALA: "Crypto", CHZ: "Crypto", IMX: "Crypto", RNDR: "Crypto", FET: "Crypto",
-    TAO: "Crypto", WLD: "Crypto", BONK: "Crypto", WIF: "Crypto", PEPE: "Crypto",
-    FLOKI: "Crypto", HBAR: "Crypto", ICP: "Crypto", VET: "Crypto", ALGO: "Crypto",
-    APT: "Crypto", TON: "Crypto", TIA: "Crypto", SEI: "Crypto", JUP: "Crypto",
-    JTO: "Crypto", PYTH: "Crypto", RAY: "Crypto", ORCA: "Crypto", ENS: "Crypto",
-    LDO: "Crypto", RPL: "Crypto", STRK: "Crypto", BLUR: "Crypto",
-    // Stocks
-    TSLA: "Markets / Econ", AAPL: "Markets / Econ", MSFT: "Markets / Econ",
-    GOOGL: "Markets / Econ", GOOG: "Markets / Econ", AMZN: "Markets / Econ",
-    META: "Markets / Econ", NVDA: "Markets / Econ", AMD: "Markets / Econ",
-    INTC: "Markets / Econ", NFLX: "Markets / Econ", DIS: "Markets / Econ",
-    JPM: "Markets / Econ", BAC: "Markets / Econ", GS: "Markets / Econ",
-    WMT: "Markets / Econ", LLY: "Markets / Econ", BRK: "Markets / Econ",
-    COIN: "Markets / Econ", HOOD: "Markets / Econ", PLTR: "Markets / Econ",
-    MSTR: "Markets / Econ", SMCI: "Markets / Econ", AVGO: "Markets / Econ",
-    // Indices / ETFs
-    SPX: "Markets / Econ", SPY: "Markets / Econ", QQQ: "Markets / Econ",
-    NDX: "Markets / Econ", VIX: "Markets / Econ", DJI: "Markets / Econ",
-    DJIA: "Markets / Econ", IWM: "Markets / Econ", RUT: "Markets / Econ",
-    // Commodities
-    GOLD: "Markets / Econ", XAU: "Markets / Econ", SILVER: "Markets / Econ",
-    XAG: "Markets / Econ", OIL: "Markets / Econ", CRUDE: "Markets / Econ",
-    BRENT: "Markets / Econ", WTI: "Markets / Econ", NATGAS: "Markets / Econ",
-    COPPER: "Markets / Econ", PLATINUM: "Markets / Econ", PALLADIUM: "Markets / Econ",
-    WHEAT: "Markets / Econ", CORN: "Markets / Econ", SOYBEAN: "Markets / Econ",
-    COFFEE: "Markets / Econ", COCOA: "Markets / Econ", SUGAR: "Markets / Econ",
-    // Forex (commonly traded)
-    DXY: "Markets / Econ", EURUSD: "Markets / Econ", USDJPY: "Markets / Econ",
-    GBPUSD: "Markets / Econ", USDCNY: "Markets / Econ",
-  };
-  function inferFromTickers(text) {
-    if (!text) return null;
-    const matches = text.match(/\$([A-Z]{2,6})\b/g);
-    if (!matches) return null;
-    for (const m of matches) {
-      const t = m.slice(1).toUpperCase();
-      if (TICKER_TYPE[t]) return TICKER_TYPE[t];
-    }
-    return null;
-  }
-
   // Last-resort category inference from market text. Order matters — first
   // match wins, so put the more specific patterns above the broader ones.
   const INFER_PATTERNS = [
@@ -679,9 +626,6 @@
     }
     if (m.category) return m.category;
     const text = [m.question, ...(events.map(e => e?.title).filter(Boolean))].join(" ");
-    // Ticker inference catches Limitless-style "$BTC above $X" markets.
-    cat = inferFromTickers(text);
-    if (cat) return cat;
     cat = inferFromText(text);
     if (cat) return cat;
     return "Other";
@@ -1032,4 +976,24 @@
     } catch (err) {
       state.loading = false;
       state.error = err;
-      const log = (ATTEMPT_LOG.length ? ATTEMPT_LOG : ["no attempts logged"
+      const log = (ATTEMPT_LOG.length ? ATTEMPT_LOG : ["no attempts logged"]).map(escapeHtml).join("<br/>");
+      $("#status").innerHTML = `
+        <div class="err">Couldn't load data</div>
+        <div style="max-width:520px;text-align:center;color:var(--muted)">
+          ${escapeHtml(err.message)}.<br/>
+          The page reads a static data file refreshed every ~10 minutes by a scheduled job, with the live API as backup for Polymarket.
+        </div>
+        <details style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);max-width:520px;text-align:left;border:1px dashed var(--ink);padding:8px;background:var(--paper-2)">
+          <summary style="cursor:pointer;color:var(--ink)">diagnostics</summary>
+          <div style="margin-top:6px;line-height:1.5">${log}</div>
+        </details>
+        <button class="iconbtn" id="retryBtn" style="margin-top:6px">Retry ↻</button>`;
+      document.getElementById("retryBtn")?.addEventListener("click", () => load());
+    }
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>
